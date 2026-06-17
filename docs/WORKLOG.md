@@ -1,5 +1,27 @@
 # Worklog
 
+## 2026-06-16 20:35 — Publish + polish; checkpoint for continuation
+
+**Summary:** Pushed to GitHub (public), rewrote README, added MIT license, and
+saved a resume memory. App left running on :8501.
+
+**Changes:**
+- GitHub: `SathishKumarAI/insta_reels_scrap` created, pushed, made **public**
+- `README.md` — full rewrite: leads with structured-extraction/provenance/
+  local-first value; documents UI, semantic search, cookie auth, batch perf
+- `LICENSE` (MIT) + `license` metadata in `pyproject.toml`
+
+**Resume here next session:**
+- [ ] **Run a real multi-reel batch** — parallel path proven (4×1s→2s) but only
+  run on 1 real URL (`DZJv2DUzGPQ`). Need 3-5 reel URLs from user.
+- [ ] Then pick up earlier follow-ups (scene-aware sampling, knowledge-graph
+  links, watch/daemon, tests) listed in the entry below.
+- [ ] Remove synthetic `DEMO123` artifacts from `data/`/`output/` (rm is
+  deny-listed — confirm first).
+- Streamlit may still be running on http://localhost:8501.
+
+---
+
 ## 2026-06-16 20:20 — Build reels→text→PDF→docs pipeline (greenfield)
 
 **Summary:** Built `reels-scrap` end-to-end from an empty repo: an Instagram-reel
