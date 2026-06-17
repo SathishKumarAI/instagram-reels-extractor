@@ -3,6 +3,7 @@ name = "reels-scrap"
 version = "0.1.0"
 description = "Instagram reels -> text (caption/transcript/OCR/vision) -> PDF -> professional docs site"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "yt-dlp>=2024.0.0",
     "instaloader>=4.11",
