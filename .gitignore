@@ -1,0 +1,24 @@
+# data + outputs
+data/
+output/
+*.session
+session-*
+.cache/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# secrets
+.env
+*.session.json
+cookies.txt
+*.cookies
+cookies*.txt
+
+# whisper/easyocr model caches
+.models/

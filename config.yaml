@@ -1,0 +1,37 @@
+# Instagram Reels -> Docs pipeline config. Toggle any combination.
+source:
+  type: urls            # urls | profile | hashtag | saved
+  urls_file: reels.txt  # used when type=urls (one reel URL per line)
+  target: ""            # profile handle (no @) or hashtag (no #), for type=profile|hashtag
+  login: false          # opt-in: use logged-in IG session (ToS risk, rate limits)
+  username: ""          # IG username when login=true (session loaded from ~/.config/instaloader)
+  limit: 50             # max reels to pull for profile/hashtag/saved
+
+auth:                   # PRIVATE reel access (your account / accounts you follow)
+  cookies_from_browser: "chrome"   # firefox | chrome | brave | edge — must be logged into IG
+  cookies_file: ""           # OR path to exported cookies.txt
+  browser_profile: ""        # optional named browser profile
+
+extract:
+  caption: true         # caption + hashtags + mentions + stats (free, from metadata)
+  transcript: true      # spoken audio -> text via faster-whisper (local)
+  ocr: true             # on-screen text via easyocr on sampled frames
+  vision: true          # AI visual summary (clean text for visual/text reels)
+  vision_backend: claude-cli   # claude-cli (your subscription, no key) | api
+  whisper_model: base   # tiny | base | small | medium | large-v3
+  whisper_device: auto  # auto | cpu | cuda
+  whisper_language: en  # "" = auto-detect; "en" forces English (less hallucination)
+  vision_model: claude-sonnet-4-6   # claude-opus-4-8 for max quality
+  frame_every_sec: 2    # sample 1 frame every N seconds for OCR/vision
+
+batch:
+  workers: 3            # parallel reels for extract+render (1 = sequential)
+
+output:
+  pdf: true             # per-reel PDF
+  docs_site: true       # mkdocs-material site with page-per-reel + master index
+  combined_pdf: false   # also emit one merged PDF with bookmarks
+
+paths:
+  data_dir: data
+  output_dir: output

@@ -1,0 +1,97 @@
+---
+title: "{{ reel.title }}"
+author: "{{ reel.author }}"
+date: "{{ reel.timestamp.strftime('%Y-%m-%d') if reel.timestamp else '' }}"
+source: "{{ reel.url }}"
+reel_id: "{{ reel.id }}"
+---
+
+# {{ reel.title }}
+
+{% if reel.thumbnail_path %}![thumbnail]({{ thumb_rel }}){% endif %}
+
+| | |
+|---|---|
+| **Author** | {{ reel.author or '—' }} |
+| **Date** | {{ reel.timestamp.strftime('%Y-%m-%d %H:%M UTC') if reel.timestamp else '—' }} |
+| **Source** | [{{ reel.url }}]({{ reel.url }}) |
+{% if reel.likes is not none %}
+| **Likes** | {{ '{:,}'.format(reel.likes) }} |
+{% endif %}
+{% if reel.views is not none %}
+| **Views** | {{ '{:,}'.format(reel.views) }} |
+{% endif %}
+{% if reel.comments is not none %}
+| **Comments** | {{ '{:,}'.format(reel.comments) }} |
+{% endif %}
+{% if reel.duration %}
+| **Duration** | {{ '%.0f'|format(reel.duration) }}s |
+{% endif %}
+
+{% if reel.genre %}
+**Genre:** `{{ reel.genre }}`
+{% endif %}
+
+{% if reel.summary %}
+## Summary
+
+{{ reel.summary }}
+{% endif %}
+
+{% if reel.structured %}
+## Details
+
+{% for key, value in reel.structured.items() %}
+{% if value %}
+**{{ key | replace('_', ' ') | title }}:**
+{% if value | is_list %}
+{% for item in value %}
+- {{ item }}
+{% endfor %}
+{% else %}
+{{ value }}
+{% endif %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if reel.facts %}
+## Key facts (with provenance)
+
+| At | Fact |
+|----|------|
+{% for f in reel.facts %}
+| `{{ f.timestamp | fmt_ts }}` | {{ f.text }} |
+{% endfor %}
+
+*Each fact is grounded in the frame at that timestamp — scrub the reel to verify.*
+{% endif %}
+
+{% if reel.caption %}
+## Caption
+
+{{ reel.caption }}
+
+{% if reel.hashtags %}**Hashtags:** {{ reel.hashtags | map('regex_hash') | join(' ') }}{% endif %}
+{% if reel.mentions %}**Mentions:** {{ reel.mentions | map('regex_at') | join(' ') }}{% endif %}
+{% endif %}
+
+{% if reel.transcript_text %}
+## Transcript
+
+{% for seg in reel.transcript %}
+- `[{{ '%0.1f'|format(seg.start) }}s]` {{ seg.text }}
+{% endfor %}
+{% endif %}
+
+{% if reel.ocr_text %}
+## On-screen text
+
+{% for line in reel.ocr_text %}
+- {{ line }}
+{% endfor %}
+{% endif %}
+
+---
+*Scraped {{ reel.scraped_at.strftime('%Y-%m-%d') if reel.scraped_at else '' }} · [original reel]({{ reel.url }}){% if reel.pdf_path %} · [download PDF]({{ pdf_rel }}){% endif %}*

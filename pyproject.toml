@@ -1,0 +1,38 @@
+[project]
+name = "reels-scrap"
+version = "0.1.0"
+description = "Instagram reels -> text (caption/transcript/OCR/vision) -> PDF -> professional docs site"
+requires-python = ">=3.12"
+dependencies = [
+    "yt-dlp>=2024.0.0",
+    "instaloader>=4.11",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "typer>=0.12",
+    "rich>=13.7",
+    "markdown>=3.6",
+    "weasyprint>=62",
+    "pypdf>=4.2",
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "faster-whisper>=1.0",
+    "imageio-ffmpeg>=0.5",
+    "easyocr>=1.7",
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+    "streamlit>=1.40",
+    "secretstorage>=3.3; sys_platform == 'linux'",  # Chrome/Brave cookie decryption
+    "fastembed>=0.4",   # local ONNX embeddings for semantic search (no cloud)
+    "numpy>=1.26",
+]
+
+[project.scripts]
+reels-scrap = "reels_scrap.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

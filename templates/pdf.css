@@ -1,0 +1,76 @@
+/* Professional PDF stylesheet — Catppuccin Mocha tinted, print-safe. */
+@page {
+  size: A4;
+  margin: 2cm 2cm 2.2cm 2cm;
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-size: 9px;
+    color: #6c7086;
+  }
+}
+
+:root {
+  --base: #1e1e2e;
+  --text: #1e1e2e;
+  --subtext: #6c7086;
+  --mauve: #8839ef;
+  --blue: #1e66f5;
+  --surface: #eff1f5;
+  --rule: #ccd0da;
+}
+
+body {
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+h1 {
+  color: var(--mauve);
+  font-size: 22px;
+  border-bottom: 3px solid var(--mauve);
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+}
+h2 {
+  color: var(--blue);
+  font-size: 15px;
+  margin-top: 20px;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 3px;
+}
+
+a { color: var(--blue); text-decoration: none; word-break: break-all; }
+
+img { max-width: 45%; border-radius: 8px; display: block; margin: 8px 0; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 10.5px;
+}
+th, td {
+  border: 1px solid var(--rule);
+  padding: 5px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--surface); width: 28%; }
+
+code {
+  background: var(--surface);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  color: var(--mauve);
+}
+
+ul { margin: 6px 0; padding-left: 18px; }
+li { margin: 2px 0; }
+
+hr { border: none; border-top: 1px solid var(--rule); margin: 18px 0; }
+
+em { color: var(--subtext); font-size: 9.5px; }
