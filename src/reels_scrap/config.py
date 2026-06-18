@@ -129,3 +129,24 @@ class Config(BaseModel):
         p = Path(self.paths.output_dir)
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    def _sub(self, parent: Path, name: str) -> Path:
+        p = parent / name
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Derived output sub-dirs — one place that knows the layout, so the
+    # local→cloud move is a single config change. `data_dir` holds INPUTS
+    # (downloaded media + the per-reel JSON record); `output_dir` holds
+    # everything DERIVED.
+    @property
+    def knowledge_dir(self) -> Path:
+        return self._sub(self.output_dir, "knowledge")
+
+    @property
+    def index_dir(self) -> Path:
+        return self._sub(self.output_dir, "index")
+
+    @property
+    def logs_dir(self) -> Path:
+        return self._sub(self.output_dir, "logs")

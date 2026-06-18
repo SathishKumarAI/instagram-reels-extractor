@@ -113,6 +113,86 @@ def search(
         )
 
 
+@app.command(name="fetch-collection")
+def fetch_collection_cmd(
+    url: str = typer.Argument(..., help="Saved-collection URL or numeric id"),
+    out: str = typer.Option("reels.txt", "--out", "-o", help="write URLs here"),
+    browser: str = typer.Option("chrome", "--browser", "-b"),
+    limit: int = typer.Option(200, "--limit"),
+    print_only: bool = typer.Option(False, "--print-only"),
+):
+    """Enumerate a named Instagram saved collection into reel URLs.
+
+    Reuses your logged-in browser cookies (no password). Writes one URL per line
+    to --out (default reels.txt), ready for `reels-scrap run`.
+    """
+    from .ingest.collection import fetch_collection
+
+    urls = fetch_collection(url, browser=browser, limit=limit)
+    if not urls:
+        console.print("[yellow]no reels found in that collection.[/]")
+        raise typer.Exit(1)
+    if not print_only:
+        Path(out).write_text("\n".join(urls) + "\n")
+        console.print(f"wrote [green]{len(urls)}[/] URLs -> {out}")
+    for u in urls:
+        console.print(u)
+
+
+@app.command()
+def serve(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8000, "--port", "-p"),
+    reload: bool = typer.Option(False, "--reload"),
+):
+    """Launch the research API (Knowledge Base + Research Chat) + UI if built."""
+    import uvicorn
+
+    from .api import create_app
+
+    console.print(f"[green]serving[/] http://{host}:{port}  (API under /api)")
+    uvicorn.run(create_app(config), host=host, port=port, reload=reload)
+
+
+@app.command(name="knowledge")
+def knowledge_cmd(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    synthesize: bool = typer.Option(False, "--synthesize", help="Claude topic overviews (costs calls)"),
+):
+    """Rebuild the aggregated Knowledge Base from the reel corpus."""
+    cfg = Config.load(config)
+    from .knowledge import build_knowledge
+
+    kb = build_knowledge(cfg)
+    if synthesize:
+        from .knowledge.synthesize import synthesize_topics
+
+        synthesize_topics(cfg, kb)
+    console.print(f"knowledge: [green]{len(kb.topics)}[/] topics over {kb.total_reels} reels")
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="Research question"),
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    k: int = typer.Option(8, "-k"),
+):
+    """Ask the research chat a question from the CLI (RAG + citations)."""
+    cfg = Config.load(config)
+    from .chat import answer_question
+
+    a = answer_question(cfg, question, k=k)
+    if a.answer:
+        console.print(a.answer)
+    else:
+        console.print(f"[yellow]{a.note}[/]")
+    if a.citations:
+        console.print("\n[dim]sources:[/]")
+        for c in a.citations:
+            console.print(f"  [{c.reel_id}] {c.title[:50]} — {c.url}")
+
+
 @app.command()
 def login(username: str = typer.Argument(..., help="Your Instagram username")):
     """Create a local Instagram session (interactive). Password/2FA stay on your machine.
