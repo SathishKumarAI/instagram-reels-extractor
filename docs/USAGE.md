@@ -4,8 +4,6 @@
 
 The whole platform is driven by one CLI (`reels-scrap`) plus a config file. The happy path is three commands: **fetch a collection → run the pipeline → serve the UI**.
 
-Features not yet in the codebase are marked **Planned**; the built path works today.
-
 ## Install
 
 No sudo needed — a static ffmpeg ships via pip.
@@ -22,14 +20,14 @@ pip install -e .
 ## The easy flow
 
 ```bash
-reels-scrap fetch-collection <url>     # → data/input/urls/*.txt        [Planned]
+reels-scrap fetch-collection <url>     # named saved collection → reels.txt
 reels-scrap run                        # ingest → … → index → knowledge
-reels-scrap serve                      # FastAPI + React UI             [Planned]
+reels-scrap serve                      # FastAPI backend + React UI on one port
 ```
 
-One command per stage; `run` chains them; everything is resumable — re-running `run` only redoes incomplete stages (spec §8, §11).
+One command per stage; `run` chains them; everything is resumable — re-running `run` only redoes incomplete stages (resume-by-sidecar).
 
-> **Built today:** `run`, `ingest-cmd`, `extract-cmd`, `render-cmd`, `index`, `search`, `login`. **Planned:** `fetch-collection` and `serve` (tickets #3 and #7). Until `serve` lands, browse the corpus via the static site or `streamlit run app.py`.
+> **Beyond the easy flow:** `reels-scrap knowledge` rebuilds the aggregated Knowledge Base (add `--synthesize` for cached Claude topic overviews), and `reels-scrap ask "<question>"` runs the RAG research chat from the CLI (cited answers). `serve` exposes both through the web UI.
 
 ## CLI commands
 
@@ -38,8 +36,10 @@ All commands take `--config / -c` (default `config.yaml`).
 | Command | What it does | Example |
 |---------|--------------|---------|
 | `run` | Full pipeline: ingest → extract → structure → render → index → knowledge. Resumable. | `reels-scrap run -c config.yaml` |
-| `fetch-collection <url>` | **Planned.** Dump a saved-collection / profile into `data/input/urls/*.txt`. | `reels-scrap fetch-collection https://...` |
-| `serve` | **Planned.** Launch FastAPI + the React UI on one port. | `reels-scrap serve` |
+| `fetch-collection <url>` | Enumerate a named saved collection into reel URLs (browser cookies, no password), one per line to `--out` (default `reels.txt`). | `reels-scrap fetch-collection https://... -b chrome` |
+| `serve` | Launch the FastAPI backend + React UI on one port (`--host`/`--port`/`--reload`). | `reels-scrap serve -p 8000` |
+| `knowledge` | Rebuild the aggregated Knowledge Base; `--synthesize` adds cached Claude topic overviews. | `reels-scrap knowledge --synthesize` |
+| `ask "<question>"` | RAG research chat from the CLI — cited answer + sources (`-k` for retrieval depth). | `reels-scrap ask "system design caching" -k 8` |
 | `ingest-cmd` | Download media + metadata only. | `reels-scrap ingest-cmd` |
 | `extract-cmd` | Re-run extractors on already-ingested reels (no re-download). | `reels-scrap extract-cmd` |
 | `render-cmd` | Re-render markdown + PDF + site from existing reel data. | `reels-scrap render-cmd` |
@@ -51,23 +51,20 @@ All commands take `--config / -c` (default `config.yaml`).
 
 ## Where inputs and outputs land
 
-| Kind | Path (target) | Notes |
-|------|---------------|-------|
-| URL lists / collections | `data/input/urls/*.txt` | what you feed in |
-| Downloaded media | `data/input/media/<id>...` | mp4 / jpg / wav / `<id>_frames/` |
-| Cookies (private reels) | `data/input/cookies/` | optional |
-| Model + session cache | `data/input/cache/` | whisper, fastembed, IG session |
-| Per-reel record (truth) | `output/reels/<id>.json` | rebuildable everything-from-here |
+| Kind | Path | Notes |
+|------|------|-------|
+| URL list | `reels.txt` | what you feed in (one reel URL per line) |
+| Per-reel record (truth) | `data/<id>.json` | rebuildable everything-from-here |
+| Downloaded media | `data/<id>...` | mp4 / jpg / wav / `<id>_frames/` |
+| Model + session cache | `data/cache/` | whisper, fastembed, IG session |
 | Markdown | `output/markdown/<id>.md` | genre, structured fields, provenance table |
 | PDF | `output/pdfs/<id>.pdf` | per-reel professional PDF |
 | Static site | `output/site/index.html` | mkdocs master index → every reel + PDF |
 | Knowledge | `output/knowledge/knowledge.json` + `<topic>.json` | aggregated topics |
 | Search index | `output/index/search_index.{npz,json}` | local semantic index |
-| Logs + manifest | `output/logs/run.log`, `run_report.json` | per-reel, per-stage success/error + queue state |
+| Logs + manifest | `output/logs/run.log`, `run_report.json` | per-reel, per-stage success/error |
 
-> **Inputs and outputs are deliberately separated** so you can wipe `output/` to force a clean rebuild without re-downloading anything (see [ARCHITECTURE.md](ARCHITECTURE.md#directory-layout--inputs-vs-outputs)).
->
-> **Current code note:** today reel JSON lands under `data/<id>.json` and the index/report under `output/` (flat layout); the `input/output` split is ticket #2.
+> **Inputs (`data/`) and outputs (`output/`) are deliberately separated** so you can wipe `output/` to force a clean rebuild without re-downloading anything. The derived sub-dirs hang off `Config`'s `knowledge_dir` / `index_dir` / `logs_dir` properties — see [ARCHITECTURE.md](ARCHITECTURE.md#directory-layout--inputs-vs-outputs).
 
 ## config.yaml knobs
 
@@ -108,6 +105,9 @@ The config toggles every stage. Full reference:
 | `whisper_language` | `en` | `""` = auto-detect; `en` forces English (less hallucination) |
 | `vision_model` | `claude-sonnet-4-6` | `claude-opus-4-8` for max quality |
 | `frame_every_sec` | `2` | sample 1 frame every N seconds for OCR/vision |
+| `vision_concurrency` | `1` | parallel `claude -p` vision calls (semaphore-bounded; keep at 1–2 on the CLI) |
+| `vision_max_retries` | `3` | retry a throttled vision call this many times before giving up |
+| `vision_retry_backoff` | `5.0` | seconds, exponential — wait grows by `2^n` between retries |
 
 > Force English (`whisper_language: en`) to stop multilingual hallucination on music/text reels.
 
@@ -117,7 +117,7 @@ The config toggles every stage. Full reference:
 |-----|---------|---------|
 | `workers` | `3` | parallel reels for extract + render (1 = sequential) |
 
-> **Planned (spec §8):** per-stage knobs `batch.ingest_workers`, `batch.whisper_workers`, `extract.vision_concurrency`, `extract.vision_rate_per_min`. See [SCALING.md](SCALING.md) for why per-stage limits matter.
+> Vision is gated separately by `extract.vision_concurrency` (a process-wide semaphore) so raising `batch.workers` never floods the throttle-prone Claude CLI. See [SCALING.md](SCALING.md) for how the two interact.
 
 ### `output` — what to render
 
@@ -131,10 +131,10 @@ The config toggles every stage. Full reference:
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `data_dir` | `data` | local store root |
-| `output_dir` | `output` | derived artifacts root |
+| `data_dir` | `data` | inputs root — downloaded media + per-reel JSON records |
+| `output_dir` | `output` | derived artifacts root — markdown, PDFs, site, knowledge, index, logs |
 
-> **Planned:** `input_dir` and the `input/output` split, resolved through `core/paths.py` (spec §3).
+> The derived sub-dirs (`knowledge/`, `index/`, `logs/`) are resolved by `Config`'s `*_dir` properties under `output_dir` — the one place the layout lives.
 
 ## Gotchas
 

@@ -4,7 +4,7 @@
 
 The throughput target is **~100 reels/hour = 1 reel every 36 seconds** (spec §8). You don't hit that by turning concurrency up everywhere — one stage (vision) has a hard ceiling, and naive parallelism makes it *fail*. The design routes around that ceiling.
 
-Most of this is the target `pipeline/` package and is marked **Planned** (ticket #4). Today the codebase runs a simpler per-reel `batch.workers` model (`pipeline.py`); the principles below explain where it's going and why.
+Today the pipeline (`pipeline.py`) runs the cheap stages wide via a `ThreadPoolExecutor` (`batch.workers`) while gating vision through a process-wide semaphore + exponential backoff in `ratelimit.py`. The one remaining cloud-phase step — a durable, distributed job queue — is marked **Planned** below.
 
 ## The two bottlenecks
 
@@ -17,69 +17,66 @@ Everything else (download IO, OCR, render, embed) is comparatively cheap and par
 
 ## Design
 
-### 1. Stage-decoupled pipeline
+### 1. Wide-cheap stages, gated vision
 
-Each stage is **independent and idempotent**. Ingest (IO-bound, high parallelism) feeds a queue; extract workers pull from it; downstream stages read the resulting records. A slow vision call can't block downloads, and a re-run only redoes what's incomplete.
+The pipeline runs reels through a `ThreadPoolExecutor` (`batch.workers`), so the cheap stages (download IO, OCR, render, embed) run in parallel. Vision is the exception: every vision call passes through a **process-wide semaphore** (`ratelimit.py`), so however many worker threads are in flight, only `extract.vision_concurrency` of them call `claude -p` at once. A slow or throttled vision call can't multiply across threads.
 
-> **Why decouple:** if all stages ran in one per-reel worker, the vision ceiling (concurrency 1–2) would cap the *entire* pipeline at 1–2 reels in flight. Decoupling lets ingest run 8-wide while vision sips at its safe rate.
+> **Why gate vision separately:** if vision parallelism tracked `batch.workers`, raising workers to 8 would fire 8 concurrent `claude -p` calls — well past the throttle point. The semaphore decouples the two so you can run the cheap stages wide and still keep vision at its safe 1–2.
 
-### 2. Bounded concurrency per stage
+### 2. Bounded vision concurrency
 
-Each stage gets its own concurrency budget instead of one global `workers` number:
+Vision concurrency is its own budget, not tied to `batch.workers`:
 
-- **ingest** — high (e.g. 8); IO-bound.
-- **whisper** — pool ≈ CPU cores; CPU-bound.
-- **vision** — **concurrency 1–2**, behind a token-bucket rate limiter.
+- **cheap stages** — ride `batch.workers` (default 3); IO/CPU-bound, parallelize freely.
+- **vision** — **concurrency 1–2** (`extract.vision_concurrency`), held behind the semaphore.
 
-### 3. Vision: token bucket + backoff
+### 3. Vision: semaphore + backoff
 
-Vision goes through `pipeline/ratelimit.py`:
+Vision goes through `ratelimit.py`:
 
-- **Token-bucket rate limit** (`extract.vision_rate_per_min`) smooths calls so you stay under quota.
-- **Concurrency 1–2** (`extract.vision_concurrency`) — never the 3+ that throttles.
-- **Exponential backoff** on CLI failure — the empty-stderr throttle is treated as recoverable, the call retries after a growing delay rather than burning a reel.
+- **Process-wide semaphore** (`extract.vision_concurrency`, default 1) — never the 3+ that throttles.
+- **Exponential backoff** on CLI failure (`extract.vision_max_retries`, `extract.vision_retry_backoff`) — the empty-stderr throttle is treated as recoverable; the call retries after a delay growing by `2^n` rather than burning a reel.
 
 > **Why 1–2, not 3:** 3 parallel `claude -p` calls were observed throttling to silent (empty-stderr) failures. 1–2 is the safe shoulder. For real concurrency, switch `vision_backend: api` (the Claude API), which lifts the CLI ceiling — see [DEPLOY.md](DEPLOY.md).
 
-### 4. Persistent, resumable queue
+### 4. Resume-by-sidecar (durable queue is Planned)
 
-`pipeline/queue.py` keeps a SQLite (or JSONL) table of `{reel_id, stage, status, attempts}` under `output/logs/`. It **survives restart** — re-running `reels-scrap run` resumes only incomplete stages, building on the existing resume-by-sidecar behaviour.
+Re-running `reels-scrap run` resumes only incomplete stages: each reel's per-reel JSON record acts as a sidecar marking what's already done, so a run that dies partway doesn't re-scrape or re-pay-for-vision on finished reels.
 
-> **Why persistent:** a 100-reel run that dies at reel 80 should resume at 80, not re-scrape and re-pay-for-vision on the first 80.
+> **Planned (spec §8):** a full **persistent, distributed job queue** — a SQLite/Redis table of `{reel_id, stage, status, attempts}` for multi-worker scale-out — is the cloud-phase step. Today's resume relies on the per-reel sidecar plus the `run_report.json` manifest, not a standalone queue.
 
 ### 5. Retry + provenance
 
-Per-stage retry with backoff; every failure is recorded in `output/logs/run_report.json` (the provenance manifest already in place). You can see exactly which reel failed which stage, and how many attempts it took — no silent data loss.
+Vision gets per-call retry with backoff; every failure is recorded in `output/logs/run_report.json` (the provenance manifest). You can see exactly which reel failed which stage, and how many attempts it took — no silent data loss.
 
 ## Tuning table
 
-| Knob | Stage | Default (target) | Raise when… | Lower when… |
-|------|-------|------------------|-------------|-------------|
-| `batch.ingest_workers` | ingest | 8 | downloads are the bottleneck and IG isn't rate-limiting | IG returns rate-limit errors |
-| `batch.whisper_workers` | transcript | ≈ CPU cores | CPU is idle during transcription | machine thrashes / OOMs |
-| `extract.vision_concurrency` | vision | 1–2 | switched to `vision_backend: api` | seeing empty-stderr throttle |
-| `extract.vision_rate_per_min` | vision | tuned to quota | well under quota, want more throughput | hitting quota / 429s |
+| Knob | Stage | Default | Raise when… | Lower when… |
+|------|-------|---------|-------------|-------------|
+| `batch.workers` | extract+render | 3 | extra cores, vision off or on `api` | vision throttles / machine thrashes |
+| `extract.vision_concurrency` | vision | 1 | switched to `vision_backend: api` | seeing empty-stderr throttle |
+| `extract.vision_max_retries` | vision | 3 | throttling is frequent and transient | failures are real, not throttle |
+| `extract.vision_retry_backoff` | vision | 5.0s | throttle clears slowly | calls recover fast, want less idle |
 | `extract.vision_backend` | vision | `claude-cli` | need real concurrency (cloud) → `api` | staying local subscription |
-| `batch.workers` *(current code)* | extract+render | 3 | extra cores, vision off or API | vision throttles |
 
-> **Planned vs. now:** the per-stage knobs above are spec §8 (ticket #4). Today only `batch.workers` exists, governing per-reel extract+render parallelism — keep it at 3 or lower while vision uses the CLI.
+> **Today vs. cloud:** these knobs are all live. The one piece still ahead is the durable distributed queue (spec §8) — until then, keep `batch.workers` at 3 or lower while vision uses the CLI, and let the semaphore + backoff absorb throttling.
 
 ## Doing the throughput math
 
-At the 36 s/reel budget, vision is the pacing stage. With `vision_concurrency: 2` and ~60 s per call, two-in-flight clears ~2 reels/min ≈ 120/hr — *if* the rate limiter and backoff keep calls from throttling. The other stages must stay ahead of vision (they do, being cheaper and wider), so the queue never starves. Drop to the CLI's safe 1–2 concurrency and respect the rate limit, and ~100/hr is the realistic sustained figure; push past it (3+) and you go *backwards* as throttled calls retry.
+At the 36 s/reel budget, vision is the pacing stage. With `vision_concurrency: 2` and ~60 s per call, two-in-flight clears ~2 reels/min ≈ 120/hr — *if* the semaphore and backoff keep calls from throttling. The other stages stay ahead of vision (they're cheaper and ride the wider `batch.workers` pool), so vision never starves. Stay at the CLI's safe 1–2 concurrency and ~100/hr is the realistic sustained figure; push past it (3+) and you go *backwards* as throttled calls retry.
 
 ## Cloud-future
 
-The interfaces don't change when you scale out (spec §8):
+Two pieces change when you scale out (spec §8):
 
-- Swap the queue backend: **SQLite → Redis/RQ**.
-- Flip vision to the **Claude API** backend for real concurrency.
+- **Add a persistent, distributed queue** (SQLite → Redis/RQ) so multiple workers can pull jobs — this is the one **Planned** item; today's resume is sidecar-based, single-process.
+- **Flip vision to the Claude API** backend for real concurrency.
 
-Same `pipeline/` contract, same stages. See [DEPLOY.md](DEPLOY.md) for the migration checklist.
+Same stages, same `ratelimit.py` gate (which then keeps you under the API quota across workers). See [DEPLOY.md](DEPLOY.md) for the migration checklist.
 
 ## See also
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — pipeline package + data flow
+- [ARCHITECTURE.md](ARCHITECTURE.md) — module map + data flow
 - [USAGE.md](USAGE.md) — the config knobs in context
 - [DEPLOY.md](DEPLOY.md) — local→cloud, the API-backend path
 - [Design spec §8](superpowers/specs/2026-06-18-research-platform-design.md)
