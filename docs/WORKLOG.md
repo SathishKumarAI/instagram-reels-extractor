@@ -1,5 +1,34 @@
 # Worklog
 
+## 2026-06-18 14:40 — Research platform: spec + collection fetcher + tickets
+
+**Summary:** Processed a private saved collection (`front-end`, 18 reels) and
+kicked off a larger build: a local-first **research platform** (React + shadcn UI
++ FastAPI backend, Knowledge Base + RAG Research Chat) over the scraped corpus,
+designed for ~100 reels/hr, Dockerized, cloud-ready. Brainstormed + wrote the spec.
+
+**Changes:**
+- `scripts/fetch_saved_collection.py` — NEW: enumerate a *named* IG saved
+  collection (built-in `saved` only does the default feed) via the private
+  `feed/collection/<id>/posts/` endpoint, reusing Chrome cookies (yt-dlp
+  extractor, no password). Got 18 `front-end` reels → `reels.txt`.
+- Ran the 18-reel batch: 18/18 ingested; 6 full AI vision, 12 vision failures
+  (`claude CLI failed:` — 3-way parallel `claude -p` throttle). Recoverable via
+  resume once the scalable pipeline lands.
+- `docs/superpowers/specs/2026-06-18-research-platform-design.md` — NEW: full
+  design spec (modular architecture, input/output dir split, scaling, Docker,
+  RAG chat, replication prompts).
+- `TICKETS.md` — NEW: 12-ticket build tracker.
+
+**Decisions:**
+- Stack: Vite + React + shadcn + FastAPI; chat via Claude CLI (subscription, no
+  key) consistent with vision; data local with `data/input` vs `data/output`
+  separated behind a single `core/paths` module for easy local→cloud swap.
+- Scaling: stage-decoupled pipeline + persistent resumable queue + vision
+  concurrency 1–2 behind a token-bucket (3 parallel already throttles).
+
+**Follow-ups:** see `TICKETS.md` (#2–#12).
+
 ## 2026-06-18 13:26 — Multi-reel batch validation + 2 edge-case fixes
 
 **Summary:** Ran the first true multi-reel batch (4 URLs, 3 workers), validating
