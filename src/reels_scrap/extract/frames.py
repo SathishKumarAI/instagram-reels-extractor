@@ -45,6 +45,20 @@ def sample_frames(video: Path, out_dir: Path, every_sec: int = 2) -> list[Path]:
     return sorted(out_dir.glob("frame_*.jpg"))
 
 
+def has_audio_stream(video: Path) -> bool:
+    """True if the video carries at least one audio stream.
+
+    Video-only reels (no audio track) are valid; probing here lets the
+    transcript stage skip them cleanly instead of crashing on ffmpeg's
+    "Output file does not contain any stream" (exit 234).
+    """
+    ensure_ffmpeg()
+    # ffmpeg has no probe-only mode; -i to a null muxer prints stream info to stderr.
+    cmd = [ffmpeg_bin(), "-hide_banner", "-i", str(video)]
+    out = subprocess.run(cmd, capture_output=True, text=True).stderr
+    return "Audio:" in out
+
+
 def extract_audio(video: Path, out_path: Path) -> Path:
     """Extract mono 16kHz wav for whisper."""
     ensure_ffmpeg()

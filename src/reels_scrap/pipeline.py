@@ -79,11 +79,15 @@ def run_pipeline(
     progress("ingest", 0, 1, "downloading reels…")
     from .ingest import ingest
 
-    reels = ingest(cfg)
+    failures: dict[str, tuple[str, str]] = {}
+    reels = ingest(cfg, failures)
     log.info("ingested %d reels", len(reels))
     for r in reels:
         report.reel(r.id, r.url).mark("ingest", "ok")
-    progress("ingest", 1, 1, f"ingested {len(reels)} reels")
+    # record dropped URLs (private/deleted/login-gated) so they aren't lost
+    for rid, (url, err) in failures.items():
+        report.reel(rid, url).mark("ingest", "error", err)
+    progress("ingest", 1, 1, f"ingested {len(reels)} reels ({len(failures)} failed)")
     if not reels:
         report.write(cfg.output_dir)
         return reels, report

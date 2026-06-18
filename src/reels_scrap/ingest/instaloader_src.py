@@ -95,7 +95,9 @@ def _iter_posts(L, cfg: Config):
     raise ValueError(stype)
 
 
-def ingest_instaloader(cfg: Config) -> list[Reel]:
+def ingest_instaloader(
+    cfg: Config, failures: dict[str, tuple[str, str]] | None = None
+) -> list[Reel]:
     from instaloader.exceptions import (
         ConnectionException,
         TooManyRequestsException,
