@@ -1,5 +1,40 @@
 # Worklog
 
+## 2026-06-18 13:26 — Multi-reel batch validation + 2 edge-case fixes
+
+**Summary:** Ran the first true multi-reel batch (4 URLs, 3 workers), validating
+the parallel path live. Found and fixed two real edge-case bugs; re-ran to
+confirm. Committed on branch `fix/batch-edge-cases`.
+
+**Changes:**
+- `extract/frames.py` — new `has_audio_stream()` probe (ffmpeg `-i` → look for
+  `Audio:` in stderr)
+- `extract/transcript.py` — skip transcript cleanly on video-only reels instead
+  of crashing
+- `ingest/__init__.py`, `ingest/ytdlp.py`, `ingest/instaloader_src.py` — thread
+  optional `failures` dict; route ingest errors through `log.error`
+- `pipeline.py` — record dropped URLs in `run_report.json` as ingest errors
+- `reels.txt` — 4 test URLs (1 control + 3 fresh public reels)
+- `output/validation_results.md` — full validation report (untracked artifact)
+
+**Bugs fixed (found via batch run):**
+1. No-audio/video-only reel crashed transcript — ffmpeg `-vn` exits 234 →
+   CalledProcessError. Now probed and skipped clean (like the no-speech path).
+2. Failed/login-gated URL dropped silently — caught with `print()`+`continue`,
+   no report/log entry. Now logged + recorded as `ingest: error` with reason.
+
+**Verification:** 4-URL batch report went `total 3 → 4`; video-only
+`DXZgeTJDDLD` processes fully (genre=news); login-gated `DZQq3aaEfzF` recorded
+with "empty media response / use cookies" reason. 3 markdown + 3 PDFs + docs
+site + 26-vector search index produced.
+
+**Follow-ups:**
+- [ ] Open PR / merge `fix/batch-edge-cases` into `main`
+- [ ] Private-reel batch via `auth.cookies_from_browser` (would recover the
+      login-gated URL)
+- [ ] Earlier follow-ups still open: scene-aware frame sampling, knowledge-graph
+      auto-linking, watch/daemon mode, test suite
+
 ## 2026-06-16 20:35 — Publish + polish; checkpoint for continuation
 
 **Summary:** Pushed to GitHub (public), rewrote README, added MIT license, and
