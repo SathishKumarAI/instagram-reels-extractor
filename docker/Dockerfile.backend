@@ -1,0 +1,23 @@
+# Backend: pipeline + FastAPI research API.
+# ffmpeg comes from imageio-ffmpeg (pip), so no apt ffmpeg needed.
+FROM python:3.12-slim
+
+# weasyprint (PDF) needs these system libs; everything else is pip.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libffi-dev \
+    shared-mime-info fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir -e .
+
+# If the frontend was built (web/dist), copy it so FastAPI serves it single-port.
+COPY web/dist ./web/dist
+
+COPY config.yaml ./config.yaml
+
+# data/ (inputs) and output/ (derived) are bind-mounted at runtime — see compose.
+EXPOSE 8000
+CMD ["reels-scrap", "serve", "--host", "0.0.0.0", "--port", "8000"]

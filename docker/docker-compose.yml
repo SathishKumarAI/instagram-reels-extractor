@@ -1,0 +1,30 @@
+# Local-first compose. Single backend container serves the API + built UI.
+# All inputs (data/) and outputs (output/) are bind-mounted from the host, so
+# everything stays local on disk (R10) and survives container rebuilds.
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../data:/app/data        # INPUTS: downloaded media + per-reel JSON
+      - ../output:/app/output    # OUTPUTS: markdown/pdf/site/knowledge/index/logs
+      - ../config.yaml:/app/config.yaml:ro
+      # Vision/chat default to the Claude CLI (subscription). In a container,
+      # either mount your host Claude auth read-only:
+      - ${HOME}/.claude:/root/.claude:ro
+      # …OR switch to the API backend (cloud-friendly) and set the key below.
+    environment:
+      # For cloud / no-CLI: set vision_backend=api in config.yaml and provide:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+  # Optional split frontend (nginx). Not needed when the backend serves web/dist.
+  # web:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile.web
+  #   ports: ["8080:80"]
+  #   depends_on: [backend]

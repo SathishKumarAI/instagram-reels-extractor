@@ -26,3 +26,5 @@ cookies*.txt
 # frontend
 web/node_modules
 web/dist
+tests
+.pytest_cache

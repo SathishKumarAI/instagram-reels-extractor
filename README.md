@@ -93,14 +93,51 @@ Preview the site: `mkdocs serve -f output/site_src/mkdocs.yml`.
 ## CLI
 
 ```bash
-reels-scrap run         # full pipeline (ingest → extract → structure → render → index)
-reels-scrap ingest-cmd  # download only
-reels-scrap extract-cmd # re-run extractors on downloaded reels
-reels-scrap render-cmd  # re-render markdown/PDF/site
-reels-scrap index       # rebuild semantic index
-reels-scrap search "q"  # semantic query
-reels-scrap login USER  # create a local Instagram session (instaloader)
+reels-scrap run                # full pipeline (ingest → extract → structure → render → index)
+reels-scrap fetch-collection U # enumerate a named saved collection → reels.txt (browser cookies)
+reels-scrap ingest-cmd         # download only
+reels-scrap extract-cmd        # re-run extractors on downloaded reels
+reels-scrap render-cmd         # re-render markdown/PDF/site
+reels-scrap index              # rebuild semantic index
+reels-scrap knowledge          # rebuild the aggregated Knowledge Base
+reels-scrap search "q"         # semantic query
+reels-scrap ask "question"     # RAG research answer with citations (CLI)
+reels-scrap serve              # launch the React research UI + API (http://127.0.0.1:8000)
+reels-scrap login USER         # create a local Instagram session (instaloader)
 ```
+
+## Research platform (React + FastAPI)
+
+Beyond the static docs, `reels-scrap serve` runs a modern **research UI**
+(Vite + React + shadcn-style, Catppuccin Mocha) over a FastAPI backend:
+
+- **Knowledge Base** — the corpus aggregated into topics (by genre), each with key
+  facts (provenance-linked) and source reels. Optional Claude topic overviews
+  (`reels-scrap knowledge --synthesize`).
+- **Reels** — filterable grid → detail drawer (video, facts table with timestamps,
+  transcript, on-screen text, caption, PDF).
+- **Research Chat** — ask questions across the archive; answers are synthesised by
+  Claude (CLI, your subscription) and **cite the reels they came from**. Falls back to
+  raw sources if synthesis is unavailable.
+
+```bash
+cd web && npm install && npm run build   # build the UI once
+reels-scrap serve                        # serves API + UI on one port
+# dev mode: `npm run dev` (Vite :5173, proxies /api to :8000) + `reels-scrap serve`
+```
+
+Architecture, scaling (~100 reels/hr), and Docker deploy are documented in
+`docs/ARCHITECTURE.md`, `docs/SCALING.md`, `docs/DEPLOY.md`. Rebuild-from-scratch
+prompt templates live in `prompts/`.
+
+## Docker
+
+```bash
+docker compose -f docker/docker-compose.yml up --build   # API+UI on :8000
+```
+`./data` (inputs) and `./output` (derived) are bind-mounted so everything stays local.
+Claude CLI auth is mounted from the host; for cloud, switch `vision_backend: api` +
+`ANTHROPIC_API_KEY` (see `docs/DEPLOY.md`).
 
 ## Batch + performance
 
