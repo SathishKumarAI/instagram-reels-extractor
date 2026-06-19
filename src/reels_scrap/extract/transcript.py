@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..models import Reel, TranscriptSegment
-from .frames import extract_audio
+from .frames import extract_audio, has_audio_stream
 
 import threading
 
@@ -36,6 +36,11 @@ def add_transcript(reel: Reel, cfg: Config) -> Reel:
 
     audio = data_dir / f"{reel.id}.wav"
     if not audio.exists():
+        if not has_audio_stream(video):
+            from ..observability import log
+
+            log.info("%s: no audio stream (video-only reel) — skipping transcript", reel.id)
+            return reel
         extract_audio(video, audio)
     reel.audio_path = audio.name
 

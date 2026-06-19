@@ -53,9 +53,12 @@ def _to_reel(info: dict, data_dir: Path) -> Reel:
     )
 
 
-def ingest_urls(cfg: Config) -> list[Reel]:
+def ingest_urls(
+    cfg: Config, failures: dict[str, tuple[str, str]] | None = None
+) -> list[Reel]:
     import yt_dlp
 
+    from ..observability import log
     from . import read_urls_file
 
     urls = read_urls_file(cfg.source.urls_file)[: cfg.source.limit]
@@ -96,7 +99,9 @@ def ingest_urls(cfg: Config) -> list[Reel]:
             try:
                 info = ydl.extract_info(url, download=True)
             except Exception as e:  # noqa: BLE001
-                print(f"  ! failed {url}: {e}")
+                log.error("ingest failed %s: %s", url, e)
+                if failures is not None:
+                    failures[rid_guess] = (url, str(e))
                 continue
             reel = _to_reel(info, data_dir)
             # find thumbnail written next to video

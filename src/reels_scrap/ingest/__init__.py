@@ -15,17 +15,22 @@ _REEL_URL_RE = re.compile(
 )
 
 
-def ingest(cfg: Config) -> list[Reel]:
-    """Dispatch to the right ingester based on config.source.type."""
+def ingest(cfg: Config, failures: dict[str, tuple[str, str]] | None = None) -> list[Reel]:
+    """Dispatch to the right ingester based on config.source.type.
+
+    `failures`, if given, is populated with {reel_id: (url, error)} for any
+    source that could not be downloaded — so the caller can record dropped
+    URLs in the run report instead of losing them.
+    """
     stype = cfg.source.type
     if stype == "urls":
         from .ytdlp import ingest_urls
 
-        return ingest_urls(cfg)
+        return ingest_urls(cfg, failures)
     if stype in {"profile", "hashtag", "saved"}:
         from .instaloader_src import ingest_instaloader
 
-        return ingest_instaloader(cfg)
+        return ingest_instaloader(cfg, failures)
     raise ValueError(f"Unknown source.type: {stype!r}")
 
 
