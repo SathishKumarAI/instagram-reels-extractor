@@ -26,6 +26,9 @@ dependencies = [
     "secretstorage>=3.3; sys_platform == 'linux'",  # Chrome/Brave cookie decryption
     "fastembed>=0.4",   # local ONNX embeddings for semantic search (no cloud)
     "numpy>=1.26",
+    "fastapi>=0.110",   # research API backend
+    "uvicorn>=0.29",    # ASGI server for `reels-scrap serve`
+    "requests>=2.31",   # saved-collection feed client
 ]
 
 [project.scripts]

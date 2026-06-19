@@ -36,9 +36,19 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
 
     if e.vision:
         try:
+            from ..ratelimit import vision_semaphore, with_retry
             from .vision import add_summary
 
-            add_summary(reel, cfg)
+            # Gate vision to a small global concurrency + retry/backoff: parallel
+            # `claude -p` calls throttle. Transcript/OCR above stay parallel.
+            sem = vision_semaphore(e.vision_concurrency)
+            with sem:
+                with_retry(
+                    lambda: add_summary(reel, cfg),
+                    attempts=e.vision_max_retries,
+                    backoff=e.vision_retry_backoff,
+                    label=f"vision {reel.id}",
+                )
         except Exception as ex:  # noqa: BLE001
             log.error("vision failed %s: %s", reel.id, ex)
             errors["vision"] = str(ex)

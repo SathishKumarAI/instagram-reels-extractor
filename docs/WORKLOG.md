@@ -1,5 +1,75 @@
 # Worklog
 
+## 2026-06-18 16:55 — Research platform built end-to-end (12 tickets)
+
+**Summary:** Built the full local-first research platform on top of the pipeline:
+Knowledge Base + RAG Research Chat behind a React/shadcn UI and FastAPI backend,
+scaled for ~100 reels/hr, Dockerized, with replication prompts. All 12 tickets
+in `TICKETS.md` done. Branch `feat/research-platform`.
+
+**Changes (by layer):**
+- `core` — `Config` output sub-dir helpers (knowledge/index/logs); `llm.py`
+  shared text helper (claude-cli + api) twin of vision; `ratelimit.py` vision
+  semaphore + backoff retry.
+- `ingest/collection.py` — named saved-collection fetcher (script delegates);
+  `reels-scrap fetch-collection`.
+- `knowledge/` — aggregate corpus into topics by genre + optional cached Claude
+  synthesis; `reels-scrap knowledge`.
+- `chat/` — RAG (embed→retrieve→cited Claude answer, retrieval fallback);
+  `reels-scrap ask`.
+- `api/` — FastAPI (reels, detail, knowledge, search, chat, media) + serves
+  `web/dist`; `reels-scrap serve`.
+- `web/` — Vite+React+TS+Tailwind+shadcn-style, Catppuccin Mocha: Knowledge,
+  Reels (grid+detail drawer), Research Chat (cited).
+- `docker/` — backend + nginx web images + compose bind-mounting ./data + ./output.
+- `prompts/` — 10 rebuild-from-scratch prompt templates.
+- `docs/` — ARCHITECTURE/USAGE/SCALING/DEPLOY (+ README, spec) all current.
+- `tests/` — 9 pytest (api/rag/knowledge, offline-mocked) + 2 vitest.
+
+**Decisions:**
+- Additive modularization (new packages with narrow interfaces) instead of a
+  risky big-bang restructure of the working pipeline.
+- Scaling fix targeted the real bottleneck: gate vision to 1–2 concurrent +
+  backoff (3-way `claude -p` throttled to empty-stderr failures). Durable queue
+  deferred to the cloud phase, documented in SCALING.md.
+
+**Verified:** recovery run took the 18-reel `front-end` collection from 6/18 to
+**18/18 vision (0 errors)**; knowledge base now 5 topics over 23 reels (was 13
+uncategorized). API+SPA serve single-port; `ask` returns grounded cited answers;
+frontend build + all tests green.
+
+**Follow-ups:** merge `feat/research-platform` + `fix/batch-edge-cases` to main;
+optional `--synthesize` overviews; cloud queue + SSE streaming.
+
+## 2026-06-18 14:40 — Research platform: spec + collection fetcher + tickets
+
+**Summary:** Processed a private saved collection (`front-end`, 18 reels) and
+kicked off a larger build: a local-first **research platform** (React + shadcn UI
++ FastAPI backend, Knowledge Base + RAG Research Chat) over the scraped corpus,
+designed for ~100 reels/hr, Dockerized, cloud-ready. Brainstormed + wrote the spec.
+
+**Changes:**
+- `scripts/fetch_saved_collection.py` — NEW: enumerate a *named* IG saved
+  collection (built-in `saved` only does the default feed) via the private
+  `feed/collection/<id>/posts/` endpoint, reusing Chrome cookies (yt-dlp
+  extractor, no password). Got 18 `front-end` reels → `reels.txt`.
+- Ran the 18-reel batch: 18/18 ingested; 6 full AI vision, 12 vision failures
+  (`claude CLI failed:` — 3-way parallel `claude -p` throttle). Recoverable via
+  resume once the scalable pipeline lands.
+- `docs/superpowers/specs/2026-06-18-research-platform-design.md` — NEW: full
+  design spec (modular architecture, input/output dir split, scaling, Docker,
+  RAG chat, replication prompts).
+- `TICKETS.md` — NEW: 12-ticket build tracker.
+
+**Decisions:**
+- Stack: Vite + React + shadcn + FastAPI; chat via Claude CLI (subscription, no
+  key) consistent with vision; data local with `data/input` vs `data/output`
+  separated behind a single `core/paths` module for easy local→cloud swap.
+- Scaling: stage-decoupled pipeline + persistent resumable queue + vision
+  concurrency 1–2 behind a token-bucket (3 parallel already throttles).
+
+**Follow-ups:** see `TICKETS.md` (#2–#12).
+
 ## 2026-06-18 13:26 — Multi-reel batch validation + 2 edge-case fixes
 
 **Summary:** Ran the first true multi-reel batch (4 URLs, 3 workers), validating

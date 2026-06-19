@@ -49,6 +49,12 @@ class ExtractCfg(BaseModel):
     vision_backend: str = "claude-cli"   # claude-cli (subscription, no key) | api
     frame_every_sec: int = Field(default=2, ge=1, le=30)
     ocr_min_confidence: float = Field(default=0.45, ge=0, le=1)  # drop low-conf OCR junk
+    # Scaling knobs: the vision LLM is the throughput bottleneck. Parallel
+    # `claude -p` calls throttle (3-way already fails), so vision is gated to a
+    # small concurrency with retry/backoff while transcript+OCR stay parallel.
+    vision_concurrency: int = Field(default=1, ge=1, le=8)
+    vision_max_retries: int = Field(default=3, ge=1, le=10)
+    vision_retry_backoff: float = Field(default=5.0, ge=0)  # seconds, exponential
 
     @model_validator(mode="after")
     def _check(self):
@@ -129,3 +135,24 @@ class Config(BaseModel):
         p = Path(self.paths.output_dir)
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    def _sub(self, parent: Path, name: str) -> Path:
+        p = parent / name
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Derived output sub-dirs — one place that knows the layout, so the
+    # local→cloud move is a single config change. `data_dir` holds INPUTS
+    # (downloaded media + the per-reel JSON record); `output_dir` holds
+    # everything DERIVED.
+    @property
+    def knowledge_dir(self) -> Path:
+        return self._sub(self.output_dir, "knowledge")
+
+    @property
+    def index_dir(self) -> Path:
+        return self._sub(self.output_dir, "index")
+
+    @property
+    def logs_dir(self) -> Path:
+        return self._sub(self.output_dir, "logs")

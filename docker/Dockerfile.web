@@ -1,0 +1,14 @@
+# Optional standalone frontend image (nginx). For most local use the backend
+# serves web/dist on one port; use this only when splitting front/back.
+FROM node:24-slim AS build
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /web/dist /usr/share/nginx/html
+# proxy /api to the backend service
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

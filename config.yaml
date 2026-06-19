@@ -23,6 +23,9 @@ extract:
   whisper_language: en  # "" = auto-detect; "en" forces English (less hallucination)
   vision_model: claude-sonnet-4-6   # claude-opus-4-8 for max quality
   frame_every_sec: 2    # sample 1 frame every N seconds for OCR/vision
+  vision_concurrency: 1     # parallel claude vision calls (3+ throttles; keep 1-2)
+  vision_max_retries: 3     # retry a throttled/failed vision call this many times
+  vision_retry_backoff: 5.0 # seconds, exponential (5,10,20…) between vision retries
 
 batch:
   workers: 3            # parallel reels for extract+render (1 = sequential)

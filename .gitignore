@@ -22,3 +22,8 @@ cookies*.txt
 
 # whisper/easyocr model caches
 .models/
+
+# frontend
+web/node_modules
+web/dist
+.pytest_cache
