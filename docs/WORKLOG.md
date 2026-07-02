@@ -1,5 +1,72 @@
 # Worklog
 
+## 2026-07-02 15:52 — Local consolidated docs + env fix + transcript quality
+
+**Summary:** Shipped a local "collection → one self-contained HTML document"
+feature (thumbnails embedded, links back to reels, per-collection + master index),
+fixed the broken dev env, brought the dev server up, and fixed non-English
+transcript garbling. Two commits on branch `feat/local-consolidated-docs`.
+
+**Changes:**
+- `render/consolidated.py` — new stdlib-only renderer (`render_doc`, `render_index`);
+  genre-grouped cards with summary, structured fields, timestamped facts, ⚠ translated badge
+- `collections.py` — per-collection membership manifests over the flat `data/` pool
+- `docs.py` — orchestration (`build_collection_doc`, `build_master_index`, `rebuild_all`)
+- `cli.py` — `reels-scrap collection <url>` (fetch→extract→doc→open) + `consolidate`
+- `extract/transcript.py` + `models.py` + `config.py` — auto-detect language + Whisper
+  translate task; record `transcript_language/_translated/_confidence`
+- `config.yaml` — `whisper_language: en → ""`, add `whisper_translate: true`
+- `pyproject.toml` — `[dev]` extras (pytest, ruff) + pytest config
+- `scripts/` — `build_consolidated.py` (thin wrapper), `retranscribe.py` (transcript-only rerun)
+- `tests/test_docs.py` — 8 new tests (parsing, render, doc/index build, badge); 18 total green
+- `docs/BACKLOG.md` — new prioritized 11-item backlog (#1,#2,#4 done)
+
+**Decisions:**
+- Local output only — user explicitly did **not** want a claude.ai Artifact.
+- Renderer consumes raw JSON dicts (not the pydantic model) so it runs without ML deps.
+- `data/` stays a flat, deduped pool; collection membership lives in manifests, not folders.
+- Lean install (server/search/tests) — skipped the torch/whisper/weasyprint chain to avoid a
+  multi-GB pull; added faster-whisper on demand for the re-transcribe.
+- Root cause of "empty venv": interpreter shebang pointed at the repo's pre-rename path
+  (`insta_reels_scrap/`). Recreated with mise py3.12.
+- Dev server on **:8010** (`:8000` already taken on this machine).
+
+**Follow-ups:**
+- [ ] Transcript accuracy is `whisper_model`-bound (base fumbles); bump to small/medium + rerun.
+- [ ] Backlog next: #3 `collections` status table · #5 render/pipeline test coverage · #10 CI.
+- [ ] Merge `feat/local-consolidated-docs` → main when ready.
+- [ ] Extraction deps (easyocr/weasyprint/yt-dlp) still uninstalled — install before full pipeline runs.
+
+## 2026-06-30 12:22 — Brainstorm: drop cloud vision LLM for free local digest
+
+**Summary:** Investigated user idea to replace own Claude-vision summarizer with
+Instagram/Meta's "free AI context" for reels. Research (incl. the Meta "Edits"
+app) concluded **no such scrapable field exists**. Pivoted to a deterministic,
+no-LLM local design (Approach A). Design approved-in-principle; spec doc not yet
+written. No code changed this session.
+
+**Findings (why the original idea is dead):**
+- `accessibility_caption` (auto alt-text) is image-only — empty for reels.
+- yt-dlp IG info dict exposes only `description` (creator caption); no AI/alt key.
+- IG auto-captions render in-app only; not served as a subtitle/VTT track (yt-dlp #15874).
+- No Meta AI reel-summary endpoint; app-UI only.
+- "Edits" app AI (SAM object segmentation, Restyle, AI video gen, auto-captions,
+  upcoming insights assistant) is all **authoring-side** — nothing attaches to the
+  published reel as retrievable metadata.
+
+**Decisions:**
+- Approach **A** — deterministic local digest: new `extract/digest.py` fills
+  `genre/summary/structured/facts` from caption + Whisper transcript + OCR via
+  rules/regex. Facts keep frame timestamps (cheap provenance, no hallucination).
+- Archive vision = **keep `vision.py`, unwire only** (flip `vision:false`,
+  add `digest:true`; vision knobs stay as legacy, re-enable by toggle).
+- Trade-off accepted: output only as rich as caption/on-screen/speech; no
+  visual-semantic summary (the one thing a vision model uniquely sees).
+
+**Follow-ups:**
+- [ ] Write spec to `docs/superpowers/specs/2026-06-30-local-digest-design.md` + commit.
+- [ ] User reviews spec, then writing-plans → implementation.
+
 ## 2026-06-18 16:55 — Research platform built end-to-end (12 tickets)
 
 **Summary:** Built the full local-first research platform on top of the pipeline:
