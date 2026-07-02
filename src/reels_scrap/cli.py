@@ -139,6 +139,84 @@ def fetch_collection_cmd(
         console.print(u)
 
 
+def _open_in_browser(path: Path) -> None:
+    import webbrowser
+
+    webbrowser.open(path.resolve().as_uri())
+
+
+@app.command()
+def collection(
+    url: str = typer.Argument(..., help="Saved-collection URL or numeric id"),
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    browser: str = typer.Option("chrome", "--browser", "-b", help="browser to read IG cookies from"),
+    limit: int = typer.Option(200, "--limit"),
+    open_doc: bool = typer.Option(True, "--open/--no-open", help="open the doc when built"),
+):
+    """URL -> local document. Fetch a saved collection, extract new reels, build a
+    self-contained HTML doc + refresh the index, and open it. Idempotent: re-run
+    after saving more reels and only the new ones are downloaded.
+    """
+    from datetime import date
+
+    from .collections import Manifest, parse_collection_url, save_manifest
+    from .docs import build_collection_doc, build_master_index
+    from .ingest.collection import fetch_collection
+    from .pipeline import run_pipeline
+
+    cfg = Config.load(config)
+    slug, cid = parse_collection_url(url)
+
+    console.print(f"[cyan]fetching collection[/] {slug} ({cid})…")
+    reel_urls = fetch_collection(url, browser=browser, limit=limit)
+    if not reel_urls:
+        console.print("[yellow]no reels found in that collection.[/]")
+        raise typer.Exit(1)
+    reel_ids = [u.rstrip("/").rsplit("/", 1)[-1] for u in reel_urls]
+    console.print(f"  {len(reel_ids)} reels in collection")
+
+    # Drive the existing pipeline over these URLs (resume skips already-downloaded).
+    urls_file = cfg.data_dir / f".collection-{slug}.txt"
+    urls_file.write_text("\n".join(reel_urls) + "\n")
+    cfg.source.type = "urls"
+    cfg.source.urls_file = str(urls_file)
+    cfg.source.resume = True
+    console.print("[cyan]extracting new reels[/] (resume skips existing)…")
+    run_pipeline(cfg, config, progress=lambda s, c, t, m: console.print(f"  [{s}] {m}"))
+
+    m = Manifest(slug=slug, title=slug.replace("-", " ").title(), id=cid, url=url,
+                 reel_ids=reel_ids, updated=date.today().isoformat())
+    save_manifest(cfg.output_dir, m)
+    doc, rendered = build_collection_doc(cfg, m)
+    build_master_index(cfg)
+    console.print(f"[green]✓[/] {rendered} reels → {doc}")
+    if open_doc:
+        _open_in_browser(doc)
+
+
+@app.command()
+def consolidate(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    open_doc: bool = typer.Option(True, "--open/--no-open", help="open the index when built"),
+):
+    """Rebuild every collection document + the index from already-extracted data.
+
+    No network, no re-extraction — use after restyling or when you just want the
+    docs regenerated. With no collections yet, builds one 'all-saved' doc from the
+    whole data pool.
+    """
+    cfg = Config.load(config)
+    from .docs import rebuild_all
+
+    docs, index = rebuild_all(cfg)
+    if not docs:
+        console.print("[yellow]nothing in data/ to consolidate. Run `reels-scrap collection <url>` first.[/]")
+        raise typer.Exit(1)
+    console.print(f"[green]✓[/] built {len(docs)} doc(s) + index → {index}")
+    if open_doc:
+        _open_in_browser(index)
+
+
 @app.command()
 def serve(
     config: str = typer.Option("config.yaml", "--config", "-c"),

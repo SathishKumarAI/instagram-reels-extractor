@@ -93,6 +93,9 @@ Preview the site: `mkdocs serve -f output/site_src/mkdocs.yml`.
 ## CLI
 
 ```bash
+reels-scrap collection URL     # saved collection → fetch + extract + build a self-contained
+                               #   HTML doc (thumbnails embedded, links back) + open it
+reels-scrap consolidate        # rebuild every collection doc + index from already-extracted data
 reels-scrap run                # full pipeline (ingest → extract → structure → render → index)
 reels-scrap fetch-collection U # enumerate a named saved collection → reels.txt (browser cookies)
 reels-scrap ingest-cmd         # download only
