@@ -45,9 +45,16 @@ def add_transcript(reel: Reel, cfg: Config) -> Reel:
     reel.audio_path = audio.name
 
     model = _get_model(cfg.extract.whisper_model, cfg.extract.whisper_device)
-    lang = cfg.extract.whisper_language or None  # None = auto-detect
+    # Task choice: with translate ON we let Whisper auto-detect the spoken language
+    # and emit English (forcing a source language here is what garbles non-English
+    # reels). With translate OFF we honour an explicit whisper_language, else detect.
+    if cfg.extract.whisper_translate:
+        task, lang = "translate", None
+    else:
+        task, lang = "transcribe", (cfg.extract.whisper_language or None)
     segments, info = model.transcribe(
         str(audio),
+        task=task,
         language=lang,
         vad_filter=True,                  # drop non-speech (music/silence)
         condition_on_previous_text=False,  # stop hallucination loops
@@ -69,6 +76,22 @@ def add_transcript(reel: Reel, cfg: Config) -> Reel:
         parts.append(text)
     reel.transcript = segs
     reel.transcript_text = " ".join(parts)
+
+    # Provenance/quality: what language was spoken, how sure Whisper was, and
+    # whether the text we kept was translated (so downstream doesn't over-trust it).
+    detected = getattr(info, "language", "") or ""
+    reel.transcript_language = detected
+    reel.transcript_confidence = getattr(info, "language_probability", None)
+    reel.transcript_translated = bool(
+        cfg.extract.whisper_translate and detected and detected != "en"
+    )
+    if reel.transcript_translated:
+        from ..observability import log
+
+        log.info(
+            "%s: transcript translated from %s (p=%.2f)",
+            reel.id, detected, reel.transcript_confidence or 0.0,
+        )
     if not reel.transcript_text:
         from ..observability import log
 

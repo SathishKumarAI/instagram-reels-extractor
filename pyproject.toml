@@ -31,8 +31,18 @@ dependencies = [
     "requests>=2.31",   # saved-collection feed client
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
 [project.scripts]
 reels-scrap = "reels_scrap.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 [build-system]
 requires = ["setuptools>=68"]

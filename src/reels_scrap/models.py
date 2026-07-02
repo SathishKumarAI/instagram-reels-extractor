@@ -54,6 +54,9 @@ class Reel(BaseModel):
     # extracted text
     transcript: list[TranscriptSegment] = Field(default_factory=list)
     transcript_text: str = ""
+    transcript_language: str = ""          # detected source language (ISO code, e.g. "hi")
+    transcript_translated: bool = False    # True when translated to English from another language
+    transcript_confidence: float | None = None  # whisper language-detection probability [0..1]
     ocr_text: list[str] = Field(default_factory=list)
     summary: str = ""
     genre: str = ""                                       # tutorial|product|educational|...

@@ -44,7 +44,13 @@ class ExtractCfg(BaseModel):
     vision: bool = False
     whisper_model: str = "base"
     whisper_device: str = "auto"
-    whisper_language: str = ""   # "" = auto-detect; set "en" to force English
+    whisper_language: str = ""   # "" = auto-detect; set e.g. "en" to force a source language
+    # Non-English reels: Whisper's built-in "translate" task emits clean English
+    # regardless of the spoken language (auto-detected). ON by default so a Hindi/
+    # Tamil/etc. reel yields readable English instead of a forced-English garble.
+    # For English audio it's a near-identity transcription. Set false to keep the
+    # raw source-language transcript verbatim.
+    whisper_translate: bool = True
     vision_model: str = "claude-sonnet-4-6"
     vision_backend: str = "claude-cli"   # claude-cli (subscription, no key) | api
     frame_every_sec: int = Field(default=2, ge=1, le=30)

@@ -99,6 +99,30 @@ def _norm_genre(g) -> str:
     return g if g in GENRE_LABEL else "other"
 
 
+LANG_NAMES = {
+    "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "bn": "Bengali",
+    "pa": "Punjabi", "mr": "Marathi", "gu": "Gujarati", "kn": "Kannada", "ml": "Malayalam",
+    "es": "Spanish", "pt": "Portuguese", "fr": "French", "de": "German", "ar": "Arabic",
+    "ru": "Russian", "ja": "Japanese", "ko": "Korean", "zh": "Chinese", "id": "Indonesian",
+}
+
+
+def _lang(code: str) -> str:
+    return LANG_NAMES.get((code or "").lower(), (code or "").upper() or "another language")
+
+
+def _quality_badge(d: dict) -> str:
+    """A small warning when the transcript was machine-translated, so the reader
+    knows the English is second-hand and should verify against the reel."""
+    if not d.get("transcript_translated"):
+        return ""
+    return (
+        f"<span class='badge warn' title='Spoken in {esc(_lang(d.get('transcript_language')))}; "
+        "auto-translated to English by Whisper — verify against the reel'>"
+        f"⚠ translated from {esc(_lang(d.get('transcript_language')))}</span>"
+    )
+
+
 # ---------------------------------------------------------------- fragments
 
 
@@ -179,7 +203,7 @@ def _card(d: dict, data_dir: Path) -> str:
           <span class="genre-tag">{esc(_norm_genre(d.get('genre')))}</span>
         </div>
         <h3 class="title">{esc(d.get('title') or rid)}</h3>
-        <div class="meta">{''.join(meta)}</div>
+        <div class="meta">{''.join(meta)}{_quality_badge(d)}</div>
         {summary}
         {_structured(d.get('structured') or {})}
         {_facts(d.get('facts') or [])}
@@ -246,6 +270,8 @@ section.genre{padding:44px 0 8px}
 .meta{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--mono);font-size:12px;
   color:var(--muted);margin-bottom:14px;font-variant-numeric:tabular-nums}
 .summary{margin:0 0 14px;color:#d3dae8}
+.badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;border-radius:5px;padding:2px 8px}
+.badge.warn{color:#fbbf24;border:1px solid #6b4e12;background:rgba(251,191,36,.08)}
 dl.fields{margin:0 0 14px;border-top:1px solid var(--line);padding-top:12px}
 .field{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:4px 0;align-items:start}
 .field dt{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;

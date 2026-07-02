@@ -71,6 +71,14 @@ def test_render_doc_structure():
     assert "index.html" in html  # back-link
 
 
+def test_translated_transcript_shows_badge():
+    translated = _reel("HIN", "product", transcript_translated=True, transcript_language="hi")
+    clean = _reel("ENG", "product")
+    html = render_doc([translated, clean], DocMeta(title="X", slug="x"))
+    assert "translated from Hindi" in html  # badge rendered for the translated reel
+    assert html.count("badge warn") == 1     # not on the English one
+
+
 def test_render_index_lists_collections():
     cards = [CollectionCard(slug="front-end", title="Front End", count=22, updated="2026-07-02")]
     html = render_index(cards)

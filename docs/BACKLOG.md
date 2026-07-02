@@ -13,14 +13,14 @@ and closing the gaps that show up in real use.
 | # | Feature | Value | Effort | Status | Notes |
 |---|---------|-------|--------|--------|-------|
 | 1 | **Local consolidated docs** — `collection <url>` (fetch→extract→doc→open) + `consolidate` (rebuild from data) + per-collection membership manifests + master index | ★★★ | M | ☑ | `render/consolidated.py`, `collections.py`, `docs.py`, CLI cmds, `tests/test_docs.py` (7 passing). Self-contained HTML, thumbnails embedded, links back to reels. |
-| 2 | **Reproducible dev env** — the `.venv` is empty/broken (`reels_scrap`, `typer`, `pytest` not installed); base python only has pydantic. Pin deps, one-command bootstrap, `pytest` in dev extras | ★★★ | S | ☐ | Blocks running the full pipeline + suite locally. `pip install -e ".[dev]"` should just work. Add `dev` extras (pytest, ruff). |
+| 2 | **Reproducible dev env** — the `.venv` was broken (interpreter shebang pointed at the repo's *old* path `insta_reels_scrap/`, pre-rename). Recreated with mise py3.12; added `[dev]` extras (pytest, ruff) + pytest config | ★★★ | S | ☑ | Lean install (server+search+tests, no torch chain). Suite green (17). Extraction deps (whisper✓ now, easyocr/weasyprint/yt-dlp still skipped) install on demand. |
 
 ## Next — high value, do soon
 
 | # | Feature | Value | Effort | Status | Notes |
 |---|---------|-------|--------|--------|-------|
 | 3 | **`reels-scrap collections` (list/status)** — table of downloaded collections: name, #reels, #with-vision, last updated, doc path | ★★ | S | ☐ | Reads manifests + `run_report.json`. Cheap, high everyday utility. |
-| 4 | **Transcript quality** — non-English reels get garbled auto-translations (e.g. Hindi→"become a James Bond"). Add per-reel language detect + `translate` task, flag low-confidence transcripts in the doc | ★★★ | M | ☐ | Whisper supports `task=translate`. Surface `whisper_language` per source; mark suspect transcripts so summaries aren't trusted blindly. |
+| 4 | **Transcript quality** — non-English reels garbled by forced-English decoding. Now auto-detect language + Whisper `task=translate`; record `transcript_language/_translated/_confidence`; ⚠ badge in the doc | ★★★ | M | ☑ | 22 re-transcribed; the Hindi reel now reads as English (detect p=0.997) + badged. Quality is `whisper_model`-bound (base fumbles; small/medium better) — bump the model for accuracy. `scripts/retranscribe.py` re-runs just this stage. |
 | 5 | **Doc test coverage for render/pipeline** — only api/knowledge/rag are tested. Add render (markdown+pdf), structure, and an ingest-mock pipeline test | ★★ | M | ☐ | Guards the parts users actually see. |
 | 6 | **Incremental / idempotent guarantees, verified** — `resume` skips downloaded reels; add a test proving re-run of `collection` re-downloads nothing and only re-renders | ★★ | S | ☐ | Protects the "run it again when I save more" workflow. |
 
