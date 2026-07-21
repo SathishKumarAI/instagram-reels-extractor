@@ -5,6 +5,20 @@ output/
 session-*
 .cache/
 
+# PRIVATE: personal saved-collection registry, reel URL lists, run state, media.
+# These identify the user's private Instagram collections and content — never commit.
+# Version-control sources.example.json instead (no personal ids).
+sources.json
+sources_state.json
+reels.txt
+reels-*.txt
+reels_*.txt
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.webp
+
 # python
 .venv/
 __pycache__/

@@ -15,8 +15,11 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
     e = cfg.extract
     errors: dict[str, str] = {}
     # caption/metadata already populated at ingest; nothing to do if only caption.
+    # Text records (RSS/arXiv/GitHub) have no video → structure their text instead
+    # of running audio/frame extractors.
+    is_text = not reel.video_path and bool(reel.caption or reel.transcript_text)
 
-    if e.transcript:
+    if e.transcript and not is_text:
         try:
             from .transcript import add_transcript
 
@@ -25,7 +28,7 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
             log.error("transcript failed %s: %s", reel.id, ex)
             errors["transcript"] = str(ex)
 
-    if e.ocr:
+    if e.ocr and not is_text:
         try:
             from .ocr import add_ocr
 
@@ -34,7 +37,21 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
             log.error("ocr failed %s: %s", reel.id, ex)
             errors["ocr"] = str(ex)
 
-    if e.vision:
+    # `vision` toggle drives structuring for BOTH kinds: frames for reels, text
+    # for feed records — same schema + backend, so results are interchangeable.
+    if e.vision and is_text:
+        try:
+            from ..ratelimit import vision_semaphore, with_retry
+            from .text_summary import add_text_summary
+
+            with vision_semaphore(e.vision_concurrency):
+                with_retry(lambda: add_text_summary(reel, cfg),
+                           attempts=e.vision_max_retries, backoff=e.vision_retry_backoff,
+                           label=f"text {reel.id}")
+        except Exception as ex:  # noqa: BLE001
+            log.error("text-structure failed %s: %s", reel.id, ex)
+            errors["text"] = str(ex)
+    elif e.vision:
         try:
             from ..ratelimit import vision_semaphore, with_retry
             from .vision import add_summary

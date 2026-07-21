@@ -8,6 +8,29 @@ and closing the gaps that show up in real use.
 
 ---
 
+## Product roadmap — toward a usable product (2026-07-02)
+
+Shipped this session (see TICKETS 22–27 + tasks): incremental multi-source `sync`,
+Sources tab (add/save URLs), category-grouped dashboard, **per-reel tags**,
+**per-reel + per-category token metering** (`/api/stats`), privacy hardening.
+
+Next, to make it a genuinely usable product:
+
+| Feature | Value | Effort | Why |
+|---------|-------|--------|-----|
+| **Backfill tags/tokens** on existing reels (re-extract) | ★★★ | S | current archive predates the feature; one re-vision pass populates all |
+| **Cost dashboard** — $ from tokens (model price × in/out), per-collection spend, per-run cost | ★★★ | S | `total_cost_usd` is already in the claude envelope; surface it |
+| **Tag pages / tag cloud** — click a tag → all reels across collections | ★★☆ | S | tags exist; add a `/tags` route + `/api/reels?tag=` filter |
+| **Global search bar** in the dashboard (semantic + tag + text) | ★★★ | M | `/api/search` exists; wire a top-bar omnisearch |
+| **Saved views / smart collections** (e.g. "all jobs+internships", "AI this month") | ★★☆ | M | cross-collection filters over genre+tag+date |
+| **Export** — Markdown / CSV / Notion per collection | ★★☆ | S | reuse render layer; add `/api/export` |
+| **Scheduled sync** — cron/systemd timer running `sync` nightly | ★★★ | S | incremental + dead-letter already make it safe to automate |
+| **Reel status flags** — read/unread, starred, archived, "to-apply" | ★★☆ | M | turns the archive into an actionable workflow |
+| **Dedup near-duplicates** across collections (same reel re-shared) | ★★☆ | M | shortcode dedup is exact; add perceptual/caption similarity |
+| ☑ **Local LLM vision option** (privacy) — DONE 2026-07-11: `local` backend (OpenAI-compatible, Kimi-VL on your GPU box), strict no-egress. See `docs/LOCAL-VISION.md` + `docs/PROJECT-STATUS.md` | ★★☆ | L | closes the one egress point for fully-air-gapped use |
+
+---
+
 ## Now — shipped / in flight
 
 | # | Feature | Value | Effort | Status | Notes |

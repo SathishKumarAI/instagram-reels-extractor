@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Instagram reels -> text (caption/transcript/OCR/vision) -> PDF -> professional docs site"
 requires-python = ">=3.12"
 license = "MIT"
+# CORE = fetch + sync + dedup + doc build + API/serve + search. NO torch, NO GPU.
+# `pip install -e .` stays lean (~seconds). Heavy/optional features are extras below,
+# so a no-GPU box installs only what it can run. All heavy imports are lazy (inside
+# functions), so a missing extra degrades that one feature — it never breaks the core.
 dependencies = [
     "yt-dlp>=2024.0.0",
     "instaloader>=4.11",
@@ -13,18 +17,9 @@ dependencies = [
     "typer>=0.12",
     "rich>=13.7",
     "markdown>=3.6",
-    "weasyprint>=62",
-    "pypdf>=4.2",
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
-    "faster-whisper>=1.0",
-    "imageio-ffmpeg>=0.5",
-    "easyocr>=1.7",
-    "anthropic>=0.40",
     "python-dotenv>=1.0",
-    "streamlit>=1.40",
-    "secretstorage>=3.3; sys_platform == 'linux'",  # Chrome/Brave cookie decryption
-    "fastembed>=0.4",   # local ONNX embeddings for semantic search (no cloud)
+    "secretstorage>=3.3; sys_platform == 'linux'",  # REQUIRED: Chrome cookie (sessionid) decryption
+    "fastembed>=0.4",   # local ONNX embeddings for semantic search (no cloud, no torch)
     "numpy>=1.26",
     "fastapi>=0.110",   # research API backend
     "uvicorn>=0.29",    # ASGI server for `reels-scrap serve`
@@ -32,10 +27,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
-]
+# Spoken audio -> text. faster-whisper runs on CTranslate2 (NOT torch) → CPU-friendly.
+transcript = ["faster-whisper>=1.0", "imageio-ffmpeg>=0.5"]
+# On-screen text (OCR). easyocr pulls torch+torchvision (multi-GB). GPU optional; CPU works
+# but is slow. See scripts/install-extraction.sh for the CPU-only torch wheel path.
+ocr = ["easyocr>=1.7"]
+# AI vision via API key. The default vision_backend=claude-cli needs NOTHING here.
+vision = ["anthropic>=0.40"]
+pdf = ["weasyprint>=62", "pypdf>=4.2"]     # per-reel + combined PDF
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]  # mkdocs-material site
+ui = ["streamlit>=1.40"]                    # legacy Streamlit app.py
+dev = ["pytest>=8.0", "ruff>=0.6"]
+# Everything that runs torch-free (CPU box, no GPU) — the sensible default here.
+cpu = ["reels-scrap[transcript,vision,pdf,docs,dev]"]
+# Absolutely everything, incl. torch via ocr. Needs GPU (or patience on CPU).
+full = ["reels-scrap[transcript,ocr,vision,pdf,docs,ui,dev]"]
 
 [project.scripts]
 reels-scrap = "reels_scrap.cli:app"

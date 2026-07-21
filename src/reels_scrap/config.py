@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
-SOURCE_TYPES = {"urls", "profile", "hashtag", "saved"}
+SOURCE_TYPES = {"urls", "profile", "hashtag", "saved", "rss", "arxiv", "github"}
 WHISPER_MODELS = {"tiny", "base", "small", "medium", "large-v2", "large-v3"}
 WHISPER_DEVICES = {"auto", "cpu", "cuda"}
 
@@ -37,6 +37,21 @@ class SourceCfg(BaseModel):
         return self
 
 
+class VisionLocalCfg(BaseModel):
+    """Self-hosted, OpenAI-compatible vision endpoint (vLLM / Ollama / any /v1).
+
+    Used when extract.vision_backend == "local". Runs on your own GPU box on the
+    LAN — frames never leave your network. Default model is the open-weights
+    Kimi-VL (moonshotai/Kimi-VL-A3B-Instruct), a compact multimodal VLM.
+    """
+
+    base_url: str = ""       # e.g. http://gpu-box:8000/v1  (empty until you wire the box)
+    model: str = "moonshotai/Kimi-VL-A3B-Instruct"
+    api_key: str = ""        # optional; vLLM usually needs none, Ollama none
+    timeout: float = Field(default=120.0, ge=5)
+    max_tokens: int = Field(default=900, ge=64, le=4096)
+
+
 class ExtractCfg(BaseModel):
     caption: bool = True
     transcript: bool = True
@@ -52,8 +67,21 @@ class ExtractCfg(BaseModel):
     # raw source-language transcript verbatim.
     whisper_translate: bool = True
     vision_model: str = "claude-sonnet-4-6"
-    vision_backend: str = "claude-cli"   # claude-cli (subscription, no key) | api
+    # auto (api if ANTHROPIC_API_KEY else claude-cli) | claude-cli | api | local
+    vision_backend: str = "auto"
+    vision_local: VisionLocalCfg = Field(default_factory=VisionLocalCfg)
+    # When a "local" vision call fails (endpoint down / malformed JSON after retries),
+    # fall back to claude-cli so every reel still gets extracted. NOTE: fallback frames
+    # DO leave the machine (egress to Claude). Set false for strict local-only.
+    vision_local_fallback: bool = True
     frame_every_sec: int = Field(default=2, ge=1, le=30)
+    # Frames sent to vision. Fewer = faster + cheaper (esp. via claude-cli, where each
+    # frame is an agentic Read turn). 6 is a good quality/cost balance; 4 for speed.
+    max_frames: int = Field(default=6, ge=1, le=16)
+    # Downscale sampled frames to this max width (px). Image tokens scale with pixel
+    # count, so 720 from a 1080-wide reel ≈ 2-3× fewer tokens with negligible quality
+    # loss for genre/summary. 0 = keep native resolution.
+    frame_max_width: int = Field(default=720, ge=0, le=1920)
     ocr_min_confidence: float = Field(default=0.45, ge=0, le=1)  # drop low-conf OCR junk
     # Scaling knobs: the vision LLM is the throughput bottleneck. Parallel
     # `claude -p` calls throttle (3-way already fails), so vision is gated to a
@@ -68,8 +96,13 @@ class ExtractCfg(BaseModel):
             raise ValueError(f"extract.whisper_model must be one of {sorted(WHISPER_MODELS)}")
         if self.whisper_device not in WHISPER_DEVICES:
             raise ValueError(f"extract.whisper_device must be one of {sorted(WHISPER_DEVICES)}")
-        if self.vision_backend not in {"claude-cli", "api"}:
-            raise ValueError("extract.vision_backend must be 'claude-cli' or 'api'")
+        if self.vision_backend not in {"auto", "claude-cli", "api", "local"}:
+            raise ValueError("extract.vision_backend must be 'auto', 'claude-cli', 'api' or 'local'")
+        if self.vision_backend == "local" and not self.vision_local.base_url:
+            raise ValueError(
+                "extract.vision_backend='local' requires extract.vision_local.base_url "
+                "(your OpenAI-compatible GPU endpoint, e.g. http://gpu-box:8000/v1)"
+            )
         return self
 
 

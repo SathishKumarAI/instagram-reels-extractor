@@ -1,0 +1,54 @@
+# CLAUDE-ONLY fast mode: NO CPU work. Skips whisper transcript + easyocr entirely,
+# uses only Claude vision (genre/summary/tags/facts/tokens). Much faster per reel.
+# Toggle: use this config (or `sync --claude-only`) vs config-deep.yaml (adds transcript).
+source:
+  type: urls
+  urls_file: reels-phd.txt
+  target: ""
+  login: false
+  username: ""
+  limit: 200
+  resume: true
+
+auth:
+  cookies_from_browser: "chrome"   # used for collection listing (works with Chrome open)
+  cookies_file: "cookies.txt"      # used for per-reel download (avoids Chrome DB lock)
+  browser_profile: ""
+
+extract:
+  caption: true
+  transcript: false     # OFF — no CPU whisper (this is the speed win)
+  ocr: false            # OFF — no torch/easyocr
+  vision: true          # Claude only
+  vision_backend: auto      # auto | claude-cli | api | local  (override per-run: sync --backend local)
+  # Self-hosted vision (your own GPU box) — used when vision_backend=local. Frames
+  # stay on your LAN. Default open-weights model: Kimi-VL. Fill base_url to enable.
+  vision_local:
+    base_url: ""            # e.g. http://gpu-box:8000/v1  (empty = local backend unavailable)
+    model: "moonshotai/Kimi-VL-A3B-Instruct"
+    api_key: ""             # usually none for vLLM/Ollama
+    timeout: 120
+  vision_local_fallback: true   # local fails → fall back to claude-cli (frames egress). false = strict local
+  whisper_model: base
+  whisper_device: auto
+  whisper_language: ""
+  whisper_translate: true
+  vision_model: claude-sonnet-4-6
+  frame_every_sec: 2
+  max_frames: 4             # token reduction: fewer frames (fast mode)
+  frame_max_width: 512      # token reduction: downscale frames ~2-3x fewer image tokens
+  vision_concurrency: 1     # claude-cli throttles on parallel calls — keep at 1 (reliable)
+  vision_max_retries: 3
+  vision_retry_backoff: 5.0
+
+batch:
+  workers: 4            # parallel reels (vision gated to vision_concurrency)
+
+output:
+  pdf: false
+  docs_site: false
+  combined_pdf: false
+
+paths:
+  data_dir: data
+  output_dir: output

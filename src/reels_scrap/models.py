@@ -60,8 +60,11 @@ class Reel(BaseModel):
     ocr_text: list[str] = Field(default_factory=list)
     summary: str = ""
     genre: str = ""                                       # tutorial|product|educational|...
+    tags: list[str] = Field(default_factory=list)         # topical tags for search/filter
     structured: dict[str, Any] = Field(default_factory=dict)  # genre-specific typed fields
     facts: list[Fact] = Field(default_factory=list)      # claims with provenance
+    # vision usage {input, cache_read, output, cost_usd} + provenance {backend, model}
+    tokens: dict[str, Any] = Field(default_factory=dict)
 
     # render outputs
     markdown_path: str | None = None

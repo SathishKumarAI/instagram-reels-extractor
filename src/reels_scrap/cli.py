@@ -217,6 +217,102 @@ def consolidate(
         _open_in_browser(index)
 
 
+@app.command(name="add-source")
+def add_source_cmd(
+    url: str = typer.Argument(..., help="Saved-collection URL (or reel-urls file for type=urls)"),
+    name: str = typer.Option("", "--name", "-n", help="friendly name (defaults to slug)"),
+    type: str = typer.Option("collection", "--type", "-t", help="collection | saved | urls"),
+    sources: str = typer.Option("sources.json", "--sources", help="registry file"),
+):
+    """Register an Instagram source in sources.json for incremental `sync`."""
+    from .sources import add_source
+
+    s = add_source(url, name=name or None, type=type, path=sources)
+    console.print(f"[green]✓[/] source [bold]{s.name}[/] ({s.type}) → {sources}")
+
+
+@app.command(name="list-sources")
+def list_sources_cmd(sources: str = typer.Option("sources.json", "--sources")):
+    """Show the registered sources."""
+    from .sources import load_sources
+
+    rows = load_sources(sources)
+    if not rows:
+        console.print("[yellow]no sources registered. Add one with `reels-scrap add-source <url>`.[/]")
+        raise typer.Exit(1)
+    for s in rows:
+        flag = "[green]on[/]" if s.enabled else "[dim]off[/]"
+        console.print(f"  {flag} [bold]{s.name}[/] ({s.type})  {s.url}")
+
+
+@app.command()
+def sync(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    sources: str = typer.Option("sources.json", "--sources"),
+    browser: str = typer.Option("chrome", "--browser", "-b"),
+    build_docs: bool = typer.Option(True, "--docs/--no-docs", help="rebuild docs after sync"),
+    retry_failed: bool = typer.Option(False, "--retry-failed", help="re-attempt dead-lettered ids"),
+    only: list[str] = typer.Option(None, "--only", help="limit to named source(s); repeatable"),
+    claude_only: bool = typer.Option(
+        False, "--claude-only/--full",
+        help="Claude vision only — skip CPU whisper transcript + OCR (faster)",
+    ),
+    backend: str = typer.Option(
+        None, "--backend", "-B",
+        help="override vision backend: claude-cli | api | local (your GPU box)",
+    ),
+    open_index: bool = typer.Option(False, "--open", help="open the master index when done"),
+):
+    """Incrementally sync every enabled source: fetch latest reels, dedup against
+    what's already downloaded, ingest only the new ones, refresh docs + state.
+
+    Idempotent — re-run any time; nothing is re-downloaded and no duplicates are
+    created. This is the "every run gets the latest reels" entry point.
+
+    --claude-only skips the CPU-heavy transcript/OCR stages and uses only Claude
+    vision — much faster; flip back with --full.
+    """
+    cfg = Config.load(config)
+    if claude_only:
+        cfg.extract.transcript = False
+        cfg.extract.ocr = False
+        cfg.extract.vision = True
+        console.print("[cyan]claude-only mode[/] — transcript/OCR off, vision on")
+    if backend:
+        if backend not in {"claude-cli", "api", "local"}:
+            console.print(f"[red]invalid --backend {backend!r}[/] (claude-cli|api|local)")
+            raise typer.Exit(2)
+        if backend == "local" and not cfg.extract.vision_local.base_url:
+            console.print("[red]--backend local needs extract.vision_local.base_url in config[/]")
+            raise typer.Exit(2)
+        cfg.extract.vision_backend = backend
+        console.print(f"[cyan]vision backend[/] → {backend}"
+                      + (f" ({cfg.extract.vision_local.model})" if backend == "local" else ""))
+    from .sources import poll_all
+
+    results = poll_all(cfg, config, sources_file=sources, browser=browser,
+                       build_docs=build_docs, retry_failed=retry_failed,
+                       only=only or None)
+    if not results:
+        console.print("[yellow]no enabled sources. Add one with `reels-scrap add-source <url>`.[/]")
+        raise typer.Exit(1)
+
+    console.rule("[bold green]sync")
+    total_new = 0
+    for r in results:
+        total_new += r.ingested
+        if r.error:
+            console.print(f"  [red]✗[/] {r.name}: {r.error}")
+        else:
+            console.print(
+                f"  [green]✓[/] [bold]{r.name}[/]  current={r.current} "
+                f"new={r.new} ingested={r.ingested} deduped={r.skipped}"
+            )
+    console.print(f"\n[cyan]{total_new}[/] new reel(s) ingested across {len(results)} source(s).")
+    if open_index and build_docs:
+        _open_in_browser(cfg.output_dir / "collections" / "index.html")
+
+
 @app.command()
 def serve(
     config: str = typer.Option("config.yaml", "--config", "-c"),

@@ -1,0 +1,34 @@
+{
+  "_comment": "Template. Copy to sources.json (gitignored) and add YOUR saved-collection URLs. Never commit the real sources.json — it identifies your private collections.",
+  "sources": [
+    {
+      "name": "example-collection",
+      "url": "https://www.instagram.com/<your-handle>/saved/<collection-name>/<numeric-id>/",
+      "type": "collection",
+      "enabled": true,
+      "limit": 200
+    },
+    {
+      "_comment": "TEXT sources (no video, no vision) — richer content than reels. Same pipeline.",
+      "name": "arxiv-ai",
+      "url": "cs.AI",
+      "type": "arxiv",
+      "enabled": false,
+      "limit": 50
+    },
+    {
+      "name": "example-blog",
+      "url": "https://example.com/feed.xml",
+      "type": "rss",
+      "enabled": false,
+      "limit": 50
+    },
+    {
+      "name": "example-repo-releases",
+      "url": "https://github.com/owner/repo",
+      "type": "github",
+      "enabled": false,
+      "limit": 30
+    }
+  ]
+}
