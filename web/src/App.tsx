@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { ArrowLeft, BookOpen, Clapperboard, Home, KanbanSquare, Link2, MessagesSquare, Palette, ScrollText, Search, Table2, Tag } from "lucide-react";
+import { Activity, ArrowLeft, Compass, Scale as ScaleIcon, BookOpen, Clapperboard, Home, KanbanSquare, Link2, MessagesSquare, Palette, ScrollText, Search, Table2, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { THEME_OPTIONS, type ThemeMode, loadTheme, saveTheme } from "@/lib/theme";
 import HomePage from "./views/HomePage";
@@ -11,6 +11,9 @@ import ReelsPage from "./views/ReelsPage";
 import ResearchChat from "./views/ResearchChat";
 import SearchPage from "./views/SearchPage";
 import SourcesPage from "./views/SourcesPage";
+import ComparePage from "./views/ComparePage";
+import DiscoverPage from "./views/DiscoverPage";
+import SyncPage from "./views/SyncPage";
 import TablePage from "./views/TablePage";
 import TagsPage from "./views/TagsPage";
 
@@ -23,7 +26,10 @@ const nav = [
   { to: "/board", label: "Board", icon: KanbanSquare },
   { to: "/tags", label: "Tags", icon: Tag },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+  { to: "/discover", label: "Discover", icon: Compass },
   { to: "/sources", label: "Sources", icon: Link2 },
+  { to: "/sync", label: "Sync", icon: Activity },
+  { to: "/compare", label: "Compare", icon: ScaleIcon },
   { to: "/research", label: "Research", icon: MessagesSquare },
 ];
 
@@ -115,6 +121,9 @@ export default function App() {
           <Route path="/board" element={<KanbanPage />} />
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/sync" element={<SyncPage />} />
+          <Route path="/compare" element={<ComparePage />} />
+          <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/research" element={<ResearchChat />} />
         </Routes>
       </main>

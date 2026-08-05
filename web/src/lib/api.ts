@@ -117,6 +117,35 @@ export interface Answer {
   note: string | null;
 }
 
+export interface TagRow {
+  tag: string;
+  count: number;
+  /** which saved collections this tag appears in, most-used first */
+  collections: { name: string; count: number }[];
+}
+
+export interface Candidate {
+  id: string;
+  url: string;
+  caption: string;
+  author: string;
+  thumbnail_url: string;
+  source: string;
+  collection: string;
+  score: number;
+  why: string;
+  state: "new" | "accepted" | "rejected" | "snoozed";
+  found_on: string;
+}
+export interface DiscoverStatus {
+  running: boolean;
+  error: string;
+  summary?: {
+    found: number; kept: number; requests_used: number;
+    request_budget: number; stopped_early: string; pending: number;
+  };
+}
+
 export interface Source {
   name: string;
   url: string;
@@ -144,12 +173,90 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 }
 
 export type SyncBackend = "claude-cli" | "api" | "local";
+
+export interface SyncSourceState {
+  name: string;
+  last_run: string | null;
+  runs: number;
+  current: number;
+  new: number;
+  ingested: number;
+  failed: number;
+  error: string;
+}
+export interface SyncReport {
+  started_at?: string;
+  finished_at?: string;
+  summary?: { total_reels: number; with_errors: number; clean: number };
+  // stage -> status ("ok" | "error" | "skip") -> count
+  stages?: Record<string, Record<string, number>>;
+}
 export interface SyncStatus {
   running: boolean;
   backend: string;
   ingested: number;
   sources: number;
   error: string;
+  /** true for an API-started sync *or* a CLI one (run.log written < 60s ago) */
+  live?: boolean;
+  log_age_sec?: number | null;
+  stages?: string[];
+  stage?: string;
+  progress?: { done?: number; total?: number };
+  log?: string[];
+  source_state?: SyncSourceState[];
+  report?: SyncReport;
+}
+
+export interface Variant {
+  backend: string;
+  model: string;
+  summary: string;
+  genre: string;
+  tags: string[];
+  structured: Record<string, unknown>;
+  facts: { text: string; timestamp: number | null; frame: number | null }[];
+  tokens: Record<string, number | string>;
+  elapsed_s: number;
+  frames: number;
+  created_at: string;
+}
+export interface CompareResult {
+  reel_id: string;
+  variants: Record<string, Variant>;
+  errors: Record<string, string>;
+  /** claim-level diff, present when exactly 2 backends ran */
+  diff: {
+    a?: string;
+    b?: string;
+    shared?: { a: string; b: string; score: number }[];
+    only_a?: string[];
+    only_b?: string[];
+  };
+}
+export interface ScoreRow {
+  backend: string;
+  model: string;
+  reels: number;
+  avg_facts: number;
+  avg_tags: number;
+  avg_summary_chars: number;
+  avg_seconds: number;
+  avg_structured_fields: number;
+  cost_usd: number;
+}
+export interface Scoreboard {
+  reels_compared: number;
+  backends: ScoreRow[];
+  avg_disagreement: number | null;
+}
+export interface BatchStatus {
+  running: boolean;
+  done: number;
+  total: number;
+  current: string;
+  backends: string[];
+  errors: string[];
 }
 
 export const api = {
@@ -171,12 +278,26 @@ export const api = {
   },
   media: (id: string, kind: "thumbnail" | "video" | "pdf") =>
     `/api/media/${id}/${kind}`,
+  tags: () => get<TagRow[]>("/api/tags"),
+  discover: (state = "new") => get<Candidate[]>(`/api/discover?state=${state}`),
+  discoverRun: (max_requests = 40) =>
+    post<DiscoverStatus>("/api/discover/run", { max_requests, browser: "cookies.txt" }),
+  discoverStatus: () => get<DiscoverStatus>("/api/discover/status"),
+  discoverAction: (id: string, action: string) =>
+    post<Record<string, unknown>>(`/api/discover/${id}/${action}`),
   sources: () => get<Source[]>("/api/sources"),
   addSource: (url: string, name = "", type = "collection") =>
     post<Source>("/api/sources", { url, name, type }),
   toggleSource: (name: string) => post<Source>(`/api/sources/${encodeURIComponent(name)}/toggle`),
   sync: (backend: SyncBackend, only?: string[]) => post<SyncStatus>("/api/sync", { backend, only }),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
+  compare: (id: string, backends: SyncBackend[] = ["claude-cli", "local"]) =>
+    post<CompareResult>(`/api/reels/${id}/compare`, { backends }),
+  scoreboard: () => get<Scoreboard>("/api/compare/scoreboard"),
+  compareBatch: (n: number, backends: SyncBackend[] = ["claude-cli", "local"]) =>
+    post<BatchStatus>("/api/compare/batch", { n, backends, only_missing: true }),
+  compareStatus: () => get<BatchStatus>("/api/compare/status"),
+  compareCancel: () => post<BatchStatus>("/api/compare/cancel"),
   annotate: (id: string, patch: Record<string, boolean | string>) =>
     post(`/api/reels/${id}/annotate`, patch),
   ingestUrl: (url: string) => post<{ accepted: string; note: string }>("/api/ingest", { url }),
