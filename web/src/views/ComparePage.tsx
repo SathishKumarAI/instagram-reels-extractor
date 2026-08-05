@@ -264,6 +264,7 @@ export default function ComparePage() {
                     <th className="py-1 pr-3 font-medium">Tags</th>
                     <th className="py-1 pr-3 font-medium">Summary</th>
                     <th className="py-1 pr-3 font-medium">Fields</th>
+                    <th className="py-1 pr-3 font-medium" title="variants that parsed but carry no claim">Empty</th>
                     <th className="py-1 pr-3 font-medium">Sec</th>
                     <th className="py-1 pr-3 font-medium">$/reel</th>
                     <th className="py-1 font-medium">$ total</th>
@@ -281,6 +282,9 @@ export default function ComparePage() {
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_tags}</td>
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_summary_chars}</td>
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_structured_fields}</td>
+                      <td className={`py-1.5 pr-3 ${b.empty ? "text-peach" : "text-overlay0"}`}>
+                        {b.empty ? `${b.empty}/${b.reels}` : "—"}
+                      </td>
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_seconds}</td>
                       <td className={`py-1.5 pr-3 ${b.cost_per_reel > 0 ? "text-peach" : "text-green"}`}>
                         {fmtUsd(b.cost_per_reel)}

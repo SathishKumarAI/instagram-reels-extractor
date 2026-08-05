@@ -228,8 +228,15 @@ def scoreboard(cfg: Config, reel_ids: list[str] | None = None) -> dict:
                 "backend": name, "model": v.get("model", ""), "reels": 0,
                 "facts": 0, "tags": 0, "summary_chars": 0, "seconds": 0.0,
                 "cost_usd": 0.0, "structured_fields": 0,
+                "empty": 0, "salvaged": 0,
             })
             d["reels"] += 1
+            # a variant that parsed but carries no claim is a failure wearing a
+            # success's clothes; averaging it in silently flatters the model
+            if not (v.get("facts") or []):
+                d["empty"] += 1
+            if (v.get("tokens") or {}).get("salvaged"):
+                d["salvaged"] += 1
             d["facts"] += len(v.get("facts") or [])
             d["tags"] += len(v.get("tags") or [])
             d["summary_chars"] += len(v.get("summary") or "")
@@ -257,6 +264,7 @@ def scoreboard(cfg: Config, reel_ids: list[str] | None = None) -> dict:
             # what one reel costs on this model — the number you actually decide on.
             # See docs/research/COSTS.md for what each backend's figure means.
             "cost_per_reel": round(d["cost_usd"] / n, 4),
+            "empty_rate": round(d["empty"] / n, 3),
         })
     rows.sort(key=lambda r: -r["avg_facts"])
     return {

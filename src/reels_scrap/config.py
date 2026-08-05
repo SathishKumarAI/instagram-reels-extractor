@@ -49,7 +49,9 @@ class VisionLocalCfg(BaseModel):
     model: str = "moonshotai/Kimi-VL-A3B-Instruct"
     api_key: str = ""        # optional; vLLM usually needs none, Ollama none
     timeout: float = Field(default=120.0, ge=5)
-    max_tokens: int = Field(default=900, ge=64, le=4096)
+    # ceiling is generous because a reasoning model (qwen3-vl) spends output tokens
+    # thinking before it answers — measured: 4000 was still short on hard reels
+    max_tokens: int = Field(default=900, ge=64, le=16384)
 
 
 class VisionProfileCfg(BaseModel):

@@ -116,3 +116,27 @@ def test_scoreboard_reports_cost_per_reel(cfg):
     assert row["reels"] == 2
     assert row["cost_usd"] == 0.8
     assert row["cost_per_reel"] == 0.4
+
+
+def test_scoreboard_counts_empty_and_salvaged_variants(cfg):
+    """A variant that parsed but carries no claim is a failure wearing a success's
+    clothes — and one scraped out of a reasoning trace is not a finished answer."""
+    from reels_scrap.compare import scoreboard
+    from reels_scrap.models import Reel
+
+    r = Reel(id="E0", url="https://insta/reel/E0/", title="e0")
+    r.variants = {
+        "thin": {"backend": "local", "model": "m", "facts": [], "tags": [], "summary": "",
+                 "structured": {}, "tokens": {"salvaged": True}, "elapsed_s": 60},
+    }
+    r.save(cfg.data_dir)
+    r2 = Reel(id="E1", url="https://insta/reel/E1/", title="e1")
+    r2.variants = {
+        "thin": {"backend": "local", "model": "m", "facts": [{"text": "a claim"}],
+                 "tags": ["t"], "summary": "s", "structured": {}, "tokens": {}, "elapsed_s": 10},
+    }
+    r2.save(cfg.data_dir)
+
+    row = next(b for b in scoreboard(cfg)["backends"] if b["backend"] == "thin")
+    assert (row["reels"], row["empty"], row["salvaged"]) == (2, 1, 1)
+    assert row["empty_rate"] == 0.5

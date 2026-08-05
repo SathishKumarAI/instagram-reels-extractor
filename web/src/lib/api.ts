@@ -255,6 +255,11 @@ export interface ScoreRow {
   cost_usd: number;
   /** what one reel costs on this model — see docs/research/COSTS.md */
   cost_per_reel: number;
+  /** variants that parsed but carry no claim at all */
+  empty: number;
+  /** answers scraped out of a reasoning trace rather than finished by the model */
+  salvaged: number;
+  empty_rate: number;
 }
 export interface Scoreboard {
   reels_compared: number;

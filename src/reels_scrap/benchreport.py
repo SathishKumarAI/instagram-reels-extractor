@@ -54,12 +54,14 @@ def analyse(examples: list[dict], backend: str = "claude-cli") -> str:
 
 
 def _metrics_table(rows: list[dict]) -> str:
-    head = ("| model | reels | facts | tags | summary chars | structured fields | sec | cost |\n"
-            "|---|---|---|---|---|---|---|---|\n")
+    head = ("| model | reels | facts | tags | summary chars | structured fields | "
+            "empty | salvaged | sec | $/reel |\n"
+            "|---|---|---|---|---|---|---|---|---|---|\n")
     body = "".join(
         f"| `{r['backend']}` | {r['reels']} | {r['avg_facts']} | {r['avg_tags']} | "
-        f"{r['avg_summary_chars']} | {r['avg_structured_fields']} | {r['avg_seconds']} | "
-        f"${r['cost_usd']:.2f} |\n"
+        f"{r['avg_summary_chars']} | {r['avg_structured_fields']} | "
+        f"{r.get('empty', 0)} | {r.get('salvaged', 0)} | {r['avg_seconds']} | "
+        f"${r.get('cost_per_reel', 0):.4f} |\n"
         for r in rows
     )
     return head + body

@@ -368,7 +368,9 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     choice = payload["choices"][0]
     msg = choice.get("message", {}) or {}
     text = (msg.get("content") or "").strip()
+    salvaged = False
     if not text:
+        salvaged = True
         # Reasoning models (qwen3-vl and friends) put their draft in `reasoning` and
         # can return an empty `content` when the budget runs out mid-thought. The
         # JSON is usually in the reasoning; if it is not, say WHY rather than
@@ -386,6 +388,10 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
         "cache_read": 0,
         "cache_creation": 0,
         "output": int(u.get("completion_tokens", 0)),
+        # a record scraped out of a reasoning trace is not the same as one the model
+        # finished — the bench counts these separately rather than averaging them in
+        "salvaged": salvaged,
+        "finish_reason": str(choice.get("finish_reason") or ""),
         "cost_usd": 0.0,   # your own hardware
     }
     return _parse_json(text), tokens   # _parse_json raises on malformed → triggers fallback
