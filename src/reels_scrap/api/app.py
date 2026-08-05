@@ -13,8 +13,10 @@ A built frontend at web/dist (if present) is served at /.
 
 from __future__ import annotations
 
+import json as _json
 import re
 import threading
+import time
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -50,9 +52,85 @@ class SyncIn(BaseModel):
 
 # module-level status for the single background sync (polled by the UI)
 _SYNC: dict = {"running": False, "backend": "", "ingested": 0, "sources": 0, "error": ""}
+# …and for the single background batch comparison
+_BATCH: dict = {"running": False, "done": 0, "total": 0, "current": "",
+                "backends": [], "errors": []}
+# …and for the single background discovery run
+_DISCOVER: dict = {"running": False, "summary": {}, "error": ""}
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# pipeline stages in run order, as they appear in run.log progress lines
+STAGES = ["enumerate", "ingest", "process", "site", "index"]
+_STAGE_RE = re.compile(r"\[(ingest|process|site|index)\]")
+_COUNT_RE = re.compile(r"\((\d+)/(\d+)\)")
+
+
+def _log_tail(cfg: Config, lines: int) -> tuple[list[str], float | None]:
+    """Last N lines of run.log + seconds since it was last written.
+
+    Every sync writes it — CLI runs included — so the UI can follow a sync it
+    did not start itself.
+    """
+    p = cfg.output_dir / "run.log"
+    if not p.exists():
+        return [], None
+    tail = p.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+    return tail, time.time() - p.stat().st_mtime
+
+
+def _stage_and_progress(tail: list[str]) -> tuple[str, dict]:
+    """Newest stage marker in the log wins; `(i/n)` on that line is its progress."""
+    for line in reversed(tail):
+        m = _STAGE_RE.search(line)
+        if m:
+            c = _COUNT_RE.search(line)
+            return m.group(1), ({"done": int(c.group(1)), "total": int(c.group(2))} if c else {})
+        if "collection " in line and " page " in line:
+            return "enumerate", {}
+    return "", {}
+
+
+def _sync_sources(cfg: Config) -> list[dict]:
+    """Per-source outcome of the last sync, from output/sources_state.json."""
+    from ..sources import load_state
+
+    return [
+        {
+            "name": name,
+            "last_run": s.get("last_run"),
+            "runs": s.get("runs", 0),
+            "current": s.get("last_current", 0),
+            "new": s.get("last_new", 0),
+            "ingested": s.get("last_ingested", 0),
+            "failed": len(s.get("failed_ids", [])),
+            "error": s.get("error") or "",
+        }
+        for name, s in sorted(load_state(cfg.output_dir).items())
+    ]
+
+
+def _run_report(cfg: Config) -> dict:
+    """Per-stage ok/error tallies from the last pipeline run."""
+    p = cfg.output_dir / "run_report.json"
+    if not p.exists():
+        return {}
+    try:
+        data = _json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    stages: dict[str, dict[str, int]] = {}
+    for o in data.get("reels", {}).values():
+        for stage, status in o.get("stages", {}).items():
+            stages.setdefault(stage, {}).setdefault(status, 0)
+            stages[stage][status] += 1
+    return {
+        "started_at": data.get("started_at"),
+        "finished_at": data.get("finished_at"),
+        "summary": data.get("summary", {}),
+        "stages": stages,
+    }
 
 
 def _safe_id(reel_id: str) -> str:
@@ -86,8 +164,70 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
     )
 
     @app.get("/api/health")
-    def health() -> dict:
-        return {"ok": True, "reels": len(list(cfg.data_dir.glob("*.json")))}
+    def health(deep: bool = False) -> dict:
+        """One call that answers "is this thing actually fine?".
+
+        `deep=true` adds an Instagram session probe — a network round-trip, so it
+        is opt-in and not what a liveness check should poll.
+        """
+        import shutil
+
+        reels = len(list(cfg.data_dir.glob("*.json")))
+        checks: dict[str, dict] = {}
+
+        # disk — the corpus grows by ~5MB/reel and nothing warns you
+        du = shutil.disk_usage(cfg.data_dir if cfg.data_dir.exists() else ".")
+        free_gb = round(du.free / 1e9, 1)
+        checks["disk"] = {"ok": free_gb > 5, "free_gb": free_gb}
+
+        # search index freshness — "which reels are missing from it", NOT mtime.
+        # Reel json is rewritten by things that do not change indexed text (a
+        # Compare variant, an annotation, an author_handle backfill), so an mtime
+        # comparison reported the index stale permanently — red light, nothing wrong.
+        ip = cfg.output_dir / "search_index.npz"
+        mp = cfg.output_dir / "search_index.json"
+        if ip.exists() and mp.exists():
+            try:
+                indexed = {m["reel_id"] for m in _json.loads(mp.read_text(encoding="utf-8"))}
+            except ValueError:
+                indexed = set()
+            have = {p.stem for p in cfg.data_dir.glob("*.json")}
+            missing = have - indexed
+            checks["search_index"] = {
+                "ok": not missing,
+                "age_hours": round((time.time() - ip.stat().st_mtime) / 3600, 1),
+                "indexed": len(indexed & have),
+                "not_indexed": len(missing),
+            }
+        else:
+            checks["search_index"] = {"ok": False, "missing": True}
+
+        # cookie file — presence and age; expiry is the #1 cause of a dead sync
+        ck = Path(cfg.auth.cookies_file or "cookies.txt")
+        if ck.exists():
+            age_d = round((time.time() - ck.stat().st_mtime) / 86400, 1)
+            checks["cookies"] = {"ok": age_d < 30, "age_days": age_d, "path": str(ck)}
+        else:
+            checks["cookies"] = {"ok": False, "missing": True, "path": str(ck)}
+
+        # local vision endpoint — only meaningful if one is configured
+        base = cfg.extract.vision_local.base_url
+        if base:
+            try:
+                import requests
+
+                r = requests.get(base.rstrip("/") + "/models", timeout=3)
+                checks["local_vision"] = {"ok": r.status_code == 200, "url": base}
+            except Exception as e:
+                checks["local_vision"] = {"ok": False, "url": base, "error": str(e)[:120]}
+
+        if deep:
+            from ..ingest.collection import session_ok
+
+            ok, why = session_ok(str(ck) if ck.exists() else (cfg.auth.cookies_from_browser or "chrome"))
+            checks["instagram_session"] = {"ok": ok, "detail": why}
+
+        return {"ok": all(c.get("ok") for c in checks.values()), "reels": reels, "checks": checks}
 
     @app.get("/api/reels", response_model=list[ReelSummary])
     def list_reels() -> list[ReelSummary]:
@@ -154,6 +294,36 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
                 return v
         return _PRICES["sonnet"]
 
+    @app.get("/api/tags")
+    def list_tags() -> list[dict]:
+        """Every tag with the collections it appears in.
+
+        A tag alone says what a reel is about; the collection says which shelf of
+        yours it belongs on. The UI colours chips by collection, so it needs both.
+        """
+        from ..collections import list_manifests
+
+        by_reel: dict[str, list[str]] = {}
+        for m in list_manifests(cfg.output_dir):
+            for rid in m.reel_ids:
+                by_reel.setdefault(rid, []).append(m.slug)
+
+        tags: dict[str, dict] = {}
+        for r in _reels(cfg):
+            cols = by_reel.get(r.id, [])
+            for t in r.tags:
+                e = tags.setdefault(t, {"tag": t, "count": 0, "collections": {}})
+                e["count"] += 1
+                for c in cols:
+                    e["collections"][c] = e["collections"].get(c, 0) + 1
+        out = []
+        for e in tags.values():
+            cols = sorted(e["collections"].items(), key=lambda kv: -kv[1])
+            out.append({"tag": e["tag"], "count": e["count"],
+                        "collections": [{"name": n, "count": c} for n, c in cols]})
+        out.sort(key=lambda e: (-e["count"], e["tag"]))
+        return out
+
     @app.post("/api/tags/rename")
     def rename_tag(body: dict) -> dict:
         """Rename/merge a tag across all reels. Empty `to` deletes the tag."""
@@ -183,7 +353,7 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             return {"reels": {}, "note": "no run yet"}
         import json as _json
 
-        return _json.loads(p.read_text())
+        return _json.loads(p.read_text(encoding="utf-8"))
 
     @app.post("/api/ingest")
     def ingest_url(body: dict, bg: BackgroundTasks) -> dict:
@@ -194,13 +364,14 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
 
         def _job(u: str):
             import tempfile
+
             from ..config import Config as _C
             from ..pipeline import run_pipeline
             c = _C.load(config_path)
             c.extract.transcript = c.extract.ocr = c.extract.vision = False  # fast caption-only
             c.output.pdf = c.output.docs_site = False
             f = Path(tempfile.mkstemp(suffix=".txt", dir=c.data_dir)[1])
-            f.write_text(u + "\n")
+            f.write_text(u + "\n", encoding="utf-8")
             c.source.type = "urls"
             c.source.urls_file = str(f)
             c.source.resume = True
@@ -308,8 +479,8 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
     def export_xlsx(ids: str | None = None):
         try:
             from openpyxl import Workbook
-        except ImportError:
-            raise HTTPException(501, "xlsx export needs openpyxl — `pip install openpyxl` (or use export.csv)")
+        except ImportError as e:
+            raise HTTPException(501, "xlsx export needs openpyxl — `pip install openpyxl` (or use export.csv)") from e
         import io
 
         from fastapi.responses import Response
@@ -382,8 +553,8 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
 
         try:
             s = add_source(body.url, name=body.name or None, type=body.type)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"invalid source: {e}")
+        except Exception as e:
+            raise HTTPException(400, f"invalid source: {e}") from e
         return asdict(s)
 
     @app.post("/api/sources/{name}/toggle")
@@ -401,8 +572,26 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         return asdict(hit)
 
     @app.get("/api/sync/status")
-    def sync_status() -> dict:
-        return dict(_SYNC)
+    def sync_status(lines: int = 150) -> dict:
+        """Everything the Sync tab draws: pipeline stage, per-source outcome,
+        last run report and a live log tail.
+
+        `live` is true for a sync started here OR one started from the CLI — the
+        log file is the shared signal, so the UI follows either.
+        """
+        tail, age = _log_tail(cfg, max(1, min(lines, 1000)))
+        stage, progress = _stage_and_progress(tail)
+        return {
+            **_SYNC,
+            "live": bool(_SYNC["running"] or (age is not None and age < 60)),
+            "log_age_sec": age,
+            "stages": STAGES,
+            "stage": stage,
+            "progress": progress,
+            "log": tail,
+            "source_state": _sync_sources(cfg),
+            "report": _run_report(cfg),
+        }
 
     @app.post("/api/sync")
     def sync_ep(body: SyncIn) -> dict:
@@ -430,7 +619,7 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
                     sources=len(results),
                     error="",
                 )
-            except Exception as ex:  # noqa: BLE001
+            except Exception as ex:
                 _SYNC.update(running=False, error=str(ex)[:300])
 
         if backend == "local":
@@ -441,6 +630,133 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         _SYNC.update(running=True, backend=backend, ingested=0, sources=0, error="")
         threading.Thread(target=_job, daemon=True).start()
         return dict(_SYNC)
+
+    @app.post("/api/reels/{reel_id}/compare")
+    def compare_reel_ep(reel_id: str, body: dict | None = None) -> dict:
+        """Run the named backends over one reel, store both variants, return the diff.
+
+        Synchronous: claude-cli is ~30s and local ~5s, so the UI waits with a spinner
+        rather than growing a second job system for a single-reel action.
+        """
+        from ..compare import compare_reel
+
+        backends = (body or {}).get("backends") or ["claude-cli", "local"]
+        if not 1 <= len(backends) <= 2:
+            raise HTTPException(400, "pass 1 or 2 backends")
+        try:
+            return compare_reel(_safe_id(reel_id), backends, base_config=config_path)
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e)) from e
+
+    @app.get("/api/compare/scoreboard")
+    def compare_scoreboard() -> dict:
+        from ..compare import scoreboard
+
+        return scoreboard(cfg)
+
+    @app.get("/api/compare/status")
+    def compare_status() -> dict:
+        return dict(_BATCH)
+
+    @app.post("/api/compare/batch")
+    def compare_batch(body: dict | None = None) -> dict:
+        """Compare N reels in the background. The scoreboard is only meaningful over
+        a sample, not the one reel you happened to open."""
+        import random
+
+        if _BATCH["running"]:
+            raise HTTPException(409, "a batch comparison is already running")
+        n = int((body or {}).get("n") or 10)
+        backends = (body or {}).get("backends") or ["claude-cli", "local"]
+        only_missing = bool((body or {}).get("only_missing", True))
+
+        ids = [p.stem for p in cfg.data_dir.glob("*.json")]
+        if only_missing:
+            ids = [i for i in ids
+                   if set(backends) - set(Reel.load(cfg.data_dir / f"{i}.json").variants or {})]
+        random.shuffle(ids)
+        ids = ids[:max(1, min(n, 200))]
+        if not ids:
+            raise HTTPException(409, "nothing left to compare with those backends")
+
+        def _job():
+            from ..compare import compare_reel
+
+            for done, rid in enumerate(ids, 1):
+                if not _BATCH["running"]:      # cancelled
+                    break
+                try:
+                    compare_reel(rid, backends, base_config=config_path)
+                except Exception as ex:
+                    _BATCH["errors"].append(f"{rid}: {str(ex)[:150]}")
+                _BATCH.update(done=done, current=rid)
+            _BATCH.update(running=False, current="")
+
+        _BATCH.update(running=True, done=0, total=len(ids), current="", errors=[],
+                      backends=backends)
+        threading.Thread(target=_job, daemon=True).start()
+        return dict(_BATCH)
+
+    @app.post("/api/compare/cancel")
+    def compare_cancel() -> dict:
+        _BATCH["running"] = False
+        return dict(_BATCH)
+
+    @app.get("/api/discover")
+    def discover_list(state: str = "new") -> list[dict]:
+        from ..discover import load_candidates
+
+        rows = [c.__dict__ for c in load_candidates(cfg).values()]
+        if state != "all":
+            rows = [r for r in rows if r["state"] == state]
+        rows.sort(key=lambda r: -r["score"])
+        return rows
+
+    @app.post("/api/discover/run")
+    def discover_run(body: dict | None = None) -> dict:
+        """Harvest candidates in the background — one run touches Instagram up to
+        `max_requests` times and stops dead on the first 429."""
+        if _DISCOVER["running"]:
+            raise HTTPException(409, "a discovery run is already going")
+        b = body or {}
+
+        def _job():
+            from ..discover import discover as run_discover
+
+            try:
+                _DISCOVER.update(summary=run_discover(
+                    cfg,
+                    browser=b.get("browser") or "cookies.txt",
+                    max_requests=int(b.get("max_requests") or 40),
+                    authors=int(b.get("authors") or 6),
+                    hashtags=int(b.get("hashtags") or 4),
+                ), error="")
+            except Exception as ex:
+                _DISCOVER.update(error=str(ex)[:300])
+            _DISCOVER["running"] = False
+
+        _DISCOVER.update(running=True, error="", summary={})
+        threading.Thread(target=_job, daemon=True).start()
+        return dict(_DISCOVER)
+
+    @app.get("/api/discover/status")
+    def discover_status() -> dict:
+        return dict(_DISCOVER)
+
+    @app.post("/api/discover/{cand_id}/{action}")
+    def discover_action(cand_id: str, action: str) -> dict:
+        from ..discover import REJECTED, SNOOZED, accept, set_state
+
+        if action not in {"accept", "reject", "snooze"}:
+            raise HTTPException(400, "action must be accept | reject | snooze")
+        try:
+            if action == "accept":
+                return accept(cfg, _safe_id(cand_id))
+            state = REJECTED if action == "reject" else SNOOZED
+            c = set_state(cfg, _safe_id(cand_id), state)
+            return {"id": c.id, "state": c.state}
+        except KeyError as e:
+            raise HTTPException(404, f"no candidate {cand_id}") from e
 
     @app.get("/api/knowledge", response_model=Knowledge)
     def knowledge(rebuild: bool = False) -> Knowledge:
@@ -454,8 +770,8 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
 
         try:
             hits = do_search(cfg, q, k)
-        except FileNotFoundError:
-            raise HTTPException(409, "no search index — run extraction first")
+        except FileNotFoundError as e:
+            raise HTTPException(409, "no search index — run extraction first") from e
         return [SearchHit(**h) for h in hits]
 
     @app.post("/api/chat", response_model=Answer)
@@ -464,8 +780,8 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
 
         try:
             return answer_question(cfg, req.question, k=req.k, history=req.history)
-        except FileNotFoundError:
-            raise HTTPException(409, "no search index — run extraction first")
+        except FileNotFoundError as e:
+            raise HTTPException(409, "no search index — run extraction first") from e
 
     @app.get("/api/media/{reel_id}/{kind}")
     def media(reel_id: str, kind: str) -> FileResponse:

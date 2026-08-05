@@ -67,4 +67,4 @@ class ChatRequest(BaseModel):
     history: list[dict] = []
 
 
-__all__ = ["ReelSummary", "CategoryStat", "Stats", "SearchHit", "ChatRequest", "Answer", "Knowledge"]
+__all__ = ["Answer", "CategoryStat", "ChatRequest", "Knowledge", "ReelSummary", "SearchHit", "Stats"]

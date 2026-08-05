@@ -35,7 +35,7 @@ def test_search_missing_index_409(cfg, tmp_path):
 
 
 def test_chat_endpoint(cfg, tmp_path, monkeypatch):
-    import reels_scrap.chat.rag as rag
+    from reels_scrap.chat import rag
 
     monkeypatch.setattr(
         rag, "semantic_search",
