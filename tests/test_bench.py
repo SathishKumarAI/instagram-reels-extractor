@@ -91,7 +91,16 @@ def test_force_reruns_stored_pairs(corpus, monkeypatch, tmp_path):
 
 
 def test_report_renders_without_analysis(corpus, monkeypatch, tmp_path):
-    r = Reel.load(tmp_path / "data" / "R01.json")
+    sample = bench.build_sample(corpus, n=6, seed=0)
+    bench.save_sample(corpus, sample)
+    # the metrics table must describe the sample, not the whole corpus: a
+    # corpus-wide backfill and a 30-reel arm are not the same measurement
+    outsider = next(i for i in ("R01", "R02", "R03") if i not in sample.reel_ids)
+    out = Reel.load(tmp_path / "data" / f"{outsider}.json")
+    out.variants = {"stranger": {"facts": [{"text": "not in the sample"}], "tokens": {}}}
+    out.save(tmp_path / "data")
+
+    r = Reel.load(tmp_path / "data" / f"{sample.reel_ids[0]}.json")
     r.variants = {
         "claude-cli": {"backend": "claude-cli", "model": "claude", "summary": "ref",
                        "tags": ["a"], "structured": {"x": 1}, "elapsed_s": 20,
@@ -105,11 +114,11 @@ def test_report_renders_without_analysis(corpus, monkeypatch, tmp_path):
                        "tokens": {}},
     }
     r.save(tmp_path / "data")
-    bench.save_sample(corpus, bench.build_sample(corpus, n=6, seed=0))
 
     monkeypatch.setattr(benchreport, "analyse", lambda ex, backend="claude-cli": "")
     text = benchreport.build_report(corpus, with_analysis=True)
     assert "## Metrics" in text and "qwen3vl-8b" in text
+    assert "stranger" not in text                  # out-of-sample arm stays out
     assert "Analysis unavailable" in text          # degrades, does not crash
     assert "No run log yet" in text                # variants predating the bench are said so
 

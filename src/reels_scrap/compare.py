@@ -203,16 +203,22 @@ def disagreement_examples(cfg: Config, reference: str = "claude-cli",
     return out
 
 
-def scoreboard(cfg: Config) -> dict:
-    """Aggregate every stored variant across the corpus, per backend.
+def scoreboard(cfg: Config, reel_ids: list[str] | None = None) -> dict:
+    """Aggregate every stored variant, per backend.
 
     This is what decides the default backend — not a three-reel impression.
+    Pass `reel_ids` to score one fixed sample: without it the corpus-wide backfill
+    (641 reels of `local`) sits in the same table as a 30-reel arm, and the two
+    columns are not measuring the same thing.
     """
     per: dict[str, dict] = {}
     reels_with_variants = 0
     disagreement: list[float] = []
+    wanted = set(reel_ids) if reel_ids else None
 
     for p in sorted(cfg.data_dir.glob("*.json")):
+        if wanted is not None and p.stem not in wanted:
+            continue
         r = Reel.load(p)
         if not r.variants:
             continue

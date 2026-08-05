@@ -98,7 +98,7 @@ def build_report(cfg: Config, with_analysis: bool = True, examples: int = 40,
     except FileNotFoundError:
         reel_ids, strata = None, {}
 
-    board = scoreboard(cfg)
+    board = scoreboard(cfg, reel_ids=reel_ids)
     agree = agreement(cfg, reference=reference, reel_ids=reel_ids)
     stats = run_stats(cfg)
     ex = disagreement_examples(cfg, reference=reference, limit=examples, reel_ids=reel_ids)

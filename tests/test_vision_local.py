@@ -171,3 +171,29 @@ def test_no_content_at_all_says_why(monkeypatch, tmp_path):
     monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp(payload))
     with pytest.raises(RuntimeError, match="max_tokens"):
         vision._via_local(Reel(id="X", url="u"), _cfg(), _items(tmp_path))
+
+
+def test_parse_json_picks_the_finished_object_not_the_sketch():
+    """Reasoning models draft, correct, then answer — three objects in one reply.
+
+    A greedy regex spans all of them ("Extra data"); the first one is the sketch.
+    """
+    text = (
+        'Let me start: {"genre": "tutorial"}\n'
+        'Actually the summary matters too: {"genre": "tutorial", "summary": "draft"}\n'
+        'Final answer:\n'
+        '{"genre": "tutorial", "summary": "A short demo.", "tags": ["python"], '
+        '"structured": {}, "facts": [{"text": "uses pytest"}]}'
+    )
+    out = vision._parse_json(text)
+    assert out["summary"] == "A short demo."
+    assert out["facts"][0]["text"] == "uses pytest"
+
+
+def test_parse_json_still_reads_a_fenced_object():
+    assert vision._parse_json('prose\n```json\n{"genre": "news"}\n```\ntrailing')["genre"] == "news"
+
+
+def test_parse_json_without_any_object_names_the_output():
+    with pytest.raises(ValueError, match="no JSON object"):
+        vision._parse_json("I cannot read these frames.")

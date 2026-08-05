@@ -102,16 +102,34 @@ def _frames_with_time(reel: Reel, cfg: Config):
 
 
 def _parse_json(text: str) -> dict:
-    """Extract the first JSON object from model output, tolerant of fences/prose."""
-    text = text.strip()
+    """Extract the best JSON object from model output, tolerant of fences/prose.
+
+    A reasoning model's reply can hold several objects — a sketch, a correction,
+    then the answer. A greedy `\\{.*\\}` spans them all and json.loads reports
+    "Extra data"; taking the first gives you the sketch. So decode every object in
+    the text and keep the richest one, which is the finished answer.
+    """
+    text = (text or "").strip()
     # strip ```json ... ``` fences if present
     fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence:
         text = fence.group(1)
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    if not m:
+
+    decoder = json.JSONDecoder()
+    best: dict | None = None
+    i = text.find("{")
+    while i != -1:
+        try:
+            obj, end = decoder.raw_decode(text[i:])
+        except ValueError:
+            i = text.find("{", i + 1)
+            continue
+        if isinstance(obj, dict) and (best is None or len(obj) >= len(best)):
+            best = obj
+        i = text.find("{", i + end)
+    if best is None:
         raise ValueError(f"no JSON object in model output: {text[:120]!r}")
-    return json.loads(m.group(0))
+    return best
 
 
 def _norm_tags(raw) -> list[str]:
