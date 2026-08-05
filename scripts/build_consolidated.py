@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from reels_scrap.config import Config  # noqa: E402
-from reels_scrap.docs import rebuild_all  # noqa: E402
+from reels_scrap.config import Config
+from reels_scrap.docs import rebuild_all
 
 
 def main() -> None:

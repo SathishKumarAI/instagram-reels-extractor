@@ -30,7 +30,7 @@ class _Resp:
 
 
 def test_rss_parses_records(monkeypatch):
-    import reels_scrap.ingest.feeds as feeds
+    from reels_scrap.ingest import feeds
     monkeypatch.setattr(feeds.requests, "get", lambda *a, **k: _Resp(RSS_XML))
     recs = feeds.fetch_feed_records(Src("blog", "https://ex.com/feed", "rss"))
     assert len(recs) == 2
@@ -43,7 +43,7 @@ def test_rss_parses_records(monkeypatch):
 
 
 def test_ids_are_stable_and_safe():
-    import reels_scrap.ingest.feeds as feeds
+    from reels_scrap.ingest import feeds
     a = feeds._id_for("rss", "https://ex.com/1")
     b = feeds._id_for("rss", "https://ex.com/1")
     assert a == b and a.replace("_", "").isalnum()

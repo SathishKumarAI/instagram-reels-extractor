@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from .observability import log
 
@@ -47,7 +48,7 @@ def with_retry(
     for i in range(1, attempts + 1):
         try:
             return fn()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             last = e
             if i < attempts:
                 wait = backoff * (2 ** (i - 1))

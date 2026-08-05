@@ -83,7 +83,7 @@ optional **strictly-local** vision on your own GPU box.
 |---------|-------|--------|-----|
 | **Scheduled sync** — cron/systemd nightly `sync` | ★★★ | S | incremental + dead-letter make it safe |
 | **Cost dashboard UI** — $/collection, $/run | ★★★ | S | tokens already metered |
-| **Sync more collections** — books-to-read, ai, ideas, jobs… | ★★★ | S | only 3 of 12 sources synced so far |
+| **Sync more collections** — topic-books, ai, ideas, jobs… | ★★★ | S | only 3 of 12 sources synced so far |
 | **Near-duplicate dedup** across collections | ★★☆ | M | shortcode dedup is exact-only |
 | **Scene-aware frame sampling** | ★★☆ | M | fewer, sharper frames → cheaper/better vision |
 | **Knowledge-graph linking** between reels sharing entities | ★★☆ | L | richer navigation |

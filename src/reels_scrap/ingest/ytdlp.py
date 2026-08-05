@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Config
@@ -23,7 +23,7 @@ def _to_reel(info: dict, data_dir: Path) -> Reel:
     caption = info.get("description") or info.get("title") or ""
     ts = info.get("timestamp")
     when = (
-        datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
+        datetime.fromtimestamp(ts, tz=UTC) if ts else None
     )
     # locate downloaded file
     video = info.get("requested_downloads", [{}])[0].get("filepath") if info.get(
@@ -38,6 +38,9 @@ def _to_reel(info: dict, data_dir: Path) -> Reel:
         id=rid,
         url=info.get("webpage_url") or info.get("original_url") or "",
         author=info.get("uploader") or info.get("channel") or "",
+        # `uploader` is the display name; discovery needs the @handle, which
+        # yt-dlp puts in channel/uploader_id
+        author_handle=(info.get("channel") or info.get("uploader_id") or "").lstrip("@"),
         title=(caption.splitlines()[0][:120] if caption else rid),
         timestamp=when,
         caption=caption,
@@ -49,7 +52,7 @@ def _to_reel(info: dict, data_dir: Path) -> Reel:
         duration=info.get("duration"),
         video_path=video_path,
         thumbnail_path=None,
-        scraped_at=datetime.now(tz=timezone.utc),
+        scraped_at=datetime.now(tz=UTC),
     )
 
 
@@ -98,7 +101,7 @@ def ingest_urls(
                 continue
             try:
                 info = ydl.extract_info(url, download=True)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.error("ingest failed %s: %s", url, e)
                 if failures is not None:
                     failures[rid_guess] = (url, str(e))

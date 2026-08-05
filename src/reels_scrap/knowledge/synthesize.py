@@ -32,5 +32,5 @@ def synthesize_topics(cfg: Config, kb: Knowledge, max_notes: int = 30) -> Knowle
             log.info("knowledge: synthesised overview for '%s'", topic.name)
         except LLMError as e:
             log.warning("knowledge: overview skipped for '%s': %s", topic.name, e)
-    knowledge_path(cfg).write_text(kb.model_dump_json(indent=2))
+    knowledge_path(cfg).write_text(kb.model_dump_json(indent=2), encoding="utf-8")
     return kb

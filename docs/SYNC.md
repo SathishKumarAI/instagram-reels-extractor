@@ -7,7 +7,7 @@ every run, and the two-track Python environment that powers it.
 
 ```bash
 # one-time: register the sources you care about
-reels-scrap add-source "https://www.instagram.com/<you>/saved/phd-opportunities/18354529171213909/"
+reels-scrap add-source "https://www.instagram.com/<you>/saved/topic-research/10000000000000001/"
 
 # every run: fetch latest, dedup, ingest only new, rebuild docs
 reels-scrap sync --config config-fast.yaml
@@ -49,7 +49,7 @@ current/new counts and cumulative-seen ids per source, per run).
 ## Registry commands
 
 ```bash
-reels-scrap add-source <url> --name phd-opportunities --type collection
+reels-scrap add-source <url> --name topic-research --type collection
 reels-scrap list-sources
 reels-scrap sync --config config-fast.yaml --open   # open master index after
 ```
@@ -57,8 +57,8 @@ reels-scrap sync --config config-fast.yaml --open   # open master index after
 `sources.json` entry:
 
 ```json
-{"name": "phd-opportunities", "type": "collection",
- "url": ".../saved/phd-opportunities/18354529171213909/",
+{"name": "topic-research", "type": "collection",
+ "url": ".../saved/topic-research/10000000000000001/",
  "enabled": true, "limit": 200}
 ```
 

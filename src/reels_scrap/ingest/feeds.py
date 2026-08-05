@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from xml.etree import ElementTree as ET
 
 import requests
@@ -52,7 +52,7 @@ def _parse_dt(s: str | None) -> datetime | None:
                 "%a, %d %b %Y %H:%M:%S %Z", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(s.strip(), fmt)
-            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
         except ValueError:
             continue
     return None

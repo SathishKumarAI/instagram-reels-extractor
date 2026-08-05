@@ -31,7 +31,7 @@ Closed with project + session backlogs.
 6. **UI — collection filter.** Reels carried no collection link; membership lived
    only in `output/collections/*.json`. Added `collections` to `ReelSummary` (joined
    from manifests in `list_reels`), new "All collections" dropdown. 155/189 reels
-   tagged: internships 94 / front-end 51 / phd-opportunities 10.
+   tagged: topic-jobs 94 / front-end 51 / topic-research 10.
 7. **UI — Reader (thesis) view.** New `ReaderPage.tsx` + `/reader` route: sortable/
    filterable left index (heading + sub-heading), right long-form paper (abstract →
    key-points → details → transcript → caption → links), **text-only, no video**;
@@ -104,7 +104,7 @@ and fixed the accounting, and fixed SPA deep-link refresh.
 
 **Follow-ups:**
 - [ ] Remaining backlog: D3 saved searches, H5 model picker, P3 epics.
-- [ ] tech-guff still IG-429 (watcher gave up); use quick-add URLs.
+- [ ] example-profile still IG-429 (watcher gave up); use quick-add URLs.
 
 ## 2026-07-03 03:43 — Workflow layer: status flags, saved views, richer export
 
@@ -129,14 +129,14 @@ near-term roadmap; local-LLM vision assessed and honestly deferred (GPU-blocked)
   this no-GPU box (same blocker as OCR). Design ready; not faked.
 
 **Follow-ups:**
-- [ ] tech-guff profile sync — watcher polling (IG 429); fires when it clears.
+- [ ] example-profile profile sync — watcher polling (IG 429); fires when it clears.
 - [ ] Local-LLM vision when a GPU/torch box is available.
 
-## 2026-07-03 03:36 — Cost dashboard + scheduled sync + token-reduction defaults + tech-guff watcher
+## 2026-07-03 03:36 — Cost dashboard + scheduled sync + token-reduction defaults + example-profile watcher
 
 **Summary:** Shipped two roadmap items — a cost dashboard ($ from tokens) and a
 no-sudo scheduled-sync timer — wired the token-reduction levers in as defaults, and
-set an auto-retry watcher for the rate-limited tech-guff profile pull.
+set an auto-retry watcher for the rate-limited example-profile profile pull.
 
 **Changes:**
 - `api/schemas.py` + `api/app.py` — `/api/stats` now returns estimated USD cost
@@ -150,7 +150,7 @@ set an auto-retry watcher for the rate-limited tech-guff profile pull.
   baked into config.yaml/config-deep/config-claude; validator accepts `auto`.
 - Backfill finished: 121/123 tags+tokens (2 reels fail vision — bad frames); docs +
   knowledge + index rebuilt.
-- tech-guff watcher (`scratchpad/techguff_watch.sh`) polls IG every 20min ~3h, runs
+- example-profile watcher (`scratchpad/techguff_watch.sh`) polls IG every 20min ~3h, runs
   the sync when 429 clears.
 
 **Decisions:**
@@ -160,7 +160,7 @@ set an auto-retry watcher for the rate-limited tech-guff profile pull.
 - Scheduled sync uses claude-only (no CPU) + incremental + dead-letter → safe unattended.
 
 **Follow-ups:**
-- [ ] tech-guff profile sync — blocked by IG 429; watcher will fire when it clears (or feed URLs).
+- [ ] example-profile profile sync — blocked by IG 429; watcher will fire when it clears (or feed URLs).
 - [ ] 2 reels with unusable frames never got vision — acceptable.
 - [ ] Roadmap remaining: saved views, status flags, richer export, local-LLM vision.
 
@@ -206,11 +206,11 @@ full privacy audit that scrubbed a leaked file from public git history.
 - Token numbers from claude-cli are an **upper bound** (whole CLI turn), not vision cost;
   on subscription the backfill is $0 marginal. Worth it as a one-time pass; syncs are incremental.
 - No-GPU box → transcript via whisper CPU, OCR deferred behind `.[ocr]`; vision = the one egress.
-- Profile scraping (`_tech_guff_`) needs a session (anon = 403); currently IG 429 under load.
+- Profile scraping (`some_creator`) needs a session (anon = 403); currently IG 429 under load.
 
 **Follow-ups:**
 - [ ] Finish backfill (102/123 at log time) → full tags/tokens coverage.
-- [ ] Retry `tech-guff` profile sync when IG not rate-limiting.
+- [ ] Retry `example-profile` profile sync when IG not rate-limiting.
 - [ ] Cost dashboard ($ from tokens), scheduled sync, saved views (see PRD roadmap).
 
 ## 2026-07-02 17:52 — Torch-free deep extraction + Sources tab + deps gating
@@ -243,9 +243,9 @@ deps so a no-GPU install stays lean.
 - [ ] Run `scripts/install-extraction.sh` + set `ocr:true` if on-screen text wanted.
 - [ ] 3 music-only phd reels have no transcript (no speech) — expected.
 
-## 2026-07-02 17:23 — phd-opportunities archive + incremental sync + two-track envs
+## 2026-07-02 17:23 — topic-research archive + incremental sync + two-track envs
 
-**Summary:** Fetched the `phd-opportunities` saved collection into a local
+**Summary:** Fetched the `topic-research` saved collection into a local
 self-contained HTML doc and served it through the React frontend, then built a
 data-engineering incremental sync layer (`sources.json` registry → dedup →
 new-only ingest → dead-letter ledger) so every run pulls only the latest reels
@@ -260,7 +260,7 @@ with no duplicates.
 - `environment.yml` (new) + `config-fast.yaml` (new) — two-track envs: lean
   `.venv` (fetch/sync/serve) vs full conda `reels-scrap` (torch/whisper/OCR);
   fast caption-only config for the venv path.
-- `sources.json` (new) — phd-opportunities registered.
+- `sources.json` (new) — topic-research registered.
 - `tests/test_sources.py` (new) — dedup + dead-letter + retry; suite 20 green.
 - `docs/SYNC.md` (new), `TICKETS.md` — tickets 13–21; env + sync docs.
 
@@ -515,3 +515,134 @@ Verified live on a real private reel.
 - [ ] Test suite (config validators, URL validation, render fixtures)
 - [ ] Multi-reel batch live test (parallel path proven, not yet run on >1 real reel)
 - [ ] Remove synthetic `DEMO123` artifacts from `data/`/`output/`
+
+---
+
+## 2026-08-04 — Windows port, local GPU vision, Sync tab, discovery plan
+
+**Context:** project moved to the Windows box (RTX 5070 Ti, 16GB). `.venv` was a
+Linux venv; Chrome 127+ app-bound cookie encryption broke the auth path entirely.
+
+**Shipped:**
+- `.venv-win` + `web/node_modules` rebuilt; `pip install -e ".[docs]"`.
+- **Cookie file auth** — `_ig_cookies()` accepts an exported Netscape `cookies.txt`
+  (keeps `#HttpOnly_` rows, where `sessionid` lives); `_browser_spec()` points the
+  yt-dlp download path at the same file. Chrome extraction is impossible here
+  (yt-dlp #10927), so this is the only working path on Windows.
+- **Default saved feed as a source** — `fetch_saved_feed()`; reels saved without a
+  collection were invisible to every sync. 7 landed on the first run.
+- **utf-8 on `Reel.save/load`** — Windows cp1252 could not read back its own JSON.
+- **Docs-site failure no longer aborts a sync** (best-effort, like the PDF stage).
+- **Index built once per sync, not per source** — was ~3.5 min × 20 sources of
+  re-embedding the whole corpus per run.
+- **Sync tab** (`/sync`) — pipeline strip, live `run.log` tail, per-source table,
+  run-now. Follows CLI-started syncs via log mtime. `GET /api/sync/status` extended.
+- **Local GPU vision** — Ollama + `reels-vision` (qwen2.5vl 7B q8, 32k ctx,
+  `scripts/ollama-vision.Modelfile`), 6 frames @720px, `LOCAL_NUDGE` prompt floors.
+- **Pre-commit secret guard** (`.githooks/pre-commit`), tested both ways.
+
+**Measured — local vs Claude, 3 reels, same frames:**
+
+| | Claude | local (before tuning) | local (after) |
+|---|---|---|---|
+| facts | 8, 8, 8 | 6, 4, 3 | 6, 4, 5 |
+| tags | 6, 6, 5 | 3, 4, 3 | 5, 5, 5 |
+| summary chars | 291, 329, 349 | 143, 105, 160 | 201, 318, 305 |
+| seconds/reel | ~30 | 19 | 3-5 |
+| cost | $ | $0 | $0 |
+
+Local now reads on-screen text verbatim. It still trails on facts, and it invented
+an anime title Claude left out — the hallucination risk is real and is why
+`docs/BACKLOG-120.md` D6 (hallucination check) is P2, not P3.
+
+**Sync results:** 45 new reels in the first full run, then 7 from the saved feed.
+Corpus 672. `example-profile` profile source 429s on every attempt.
+
+**Decisions:**
+- Local model gets its own prompt suffix; the Claude prompt stays short and cheap.
+- Backend default stays Claude until the Compare tab (D1-D5) produces a scoreboard
+  over more than 3 reels. No switching on a 3-sample vibe.
+- Discovery pipeline ships **opt-in with a request budget and a 429 kill-switch**,
+  or not at all — IG rate-limits are already visible on a single profile source.
+
+**Follow-ups:** see `STATUS.md` (P0 slice) and `docs/PLAN-2026-08.md` §5 (open
+questions: discovery volume, default backend, archive re-processing, doc scrubbing).
+
+---
+
+## 2026-08-04 (cont.) — phases 1-4, discovery, compare, production
+
+Continuation of the same session. Everything below is measured on this machine.
+
+### Phase 1 — reliability (done)
+| Fix | Before | After |
+|---|---|---|
+| utf-8 | crashed without `PYTHONUTF8=1` | 43 call sites + CLI stdout/stderr reconfigure |
+| search index | 3m46s full rebuild per sync | **0.55s** incremental (`index --full` forces) |
+| carousels | dead-lettered every run | skipped at enumerate (`saved-all` 200 → 182 real reels) |
+| 429 | permanent `✗` on a source | `RateLimited` → `⏳ will retry next run`, 30/60s backoff |
+| cookie expiry | 20 identical errors | `auth session ok (cookies.txt)` probe before every sync |
+| `run.log` | unbounded | rotates 5MB × 3 |
+| GPU | `vision_concurrency: 1` | `3` |
+
+### Phase 2 — quality (done)
+- **Compare tab** — `Reel.variants` (one per backend), `POST /api/reels/{id}/compare`,
+  batch runner, corpus scoreboard, claim-level diff.
+- Claim matching uses **containment, not Jaccard**. Claude writes
+  `No. 1 is "Project Based Learning" at github.com/...`, local writes
+  `no. 1 PROJECT BASED LEARNING` — Jaccard scored that 0.3 and called it a
+  disagreement. After the fix: 6 shared / 1 Claude-only / 0 local-only.
+- **Two-pass local extraction** built and measured over 15 reels:
+  1-pass facts 5.53 / summary 217 chars / fields 1.87 / 5.74s;
+  2-pass facts 6.47 / summary 187 / fields 1.27 / 7.13s. More facts, worse on
+  everything else → **shipped opt-in, default off**. The hypothesis was wrong and
+  the config comment says so.
+- The real find: local models nest `structured` under the genre
+  (`{"educational": {...}}`) where Claude returns it flat. Every local record read
+  as "1 field" when it had 4. `_unwrap_structured()` normalises both.
+
+### Phase 3 — reach (mostly done)
+- **Discover pipeline** — `reels-scrap discover`, `/api/discover*`, Discover tab.
+  First live run: 27 candidates scoring 0.80-0.83 against collection centroids.
+  Three bugs only a live run could find:
+  1. `author` is the **display name**, not the handle → profile lookups were doomed.
+     Added `Reel.author_handle`, then backfilled **663 reels** from the feeds we
+     already page (`user.username` was in every payload, discarded) — zero extra
+     requests. 8 creators now qualify as repeat-saves.
+  2. Our tags are slugs (`open-source`); Instagram has no hyphens. Switched to
+     caption hashtags (`opensource`), minus reach spam (`fyp`, `viral`).
+  3. `/tags/web_info/` returns 200 with **zero** media. `/tags/<tag>/sections/` is
+     the endpoint that carries posts.
+- **Collection-coloured tag chips** — `GET /api/tags`, FNV-1a hash → Catppuccin
+  accent, split rail for multi-collection tags. **664 of 1603 tags span 2+
+  collections**, so the split case is the norm.
+- Not done: GPU transcripts, hybrid search.
+
+### Phase 4 — production (mostly done)
+- `scripts/setup-windows.ps1` — idempotent bootstrap; `-Schedule` registers nightly
+  sync + weekly discovery, `-Autostart` runs the API at logon.
+- `/api/health` now reports disk, index freshness, cookie age, local-vision
+  reachability, and with `?deep=true` an Instagram session probe.
+- CI (`.github/workflows/ci.yml`): pytest + ruff + tsc + vitest + a secret scan
+  (tracked filenames, credential-shaped values across **all history**, and
+  `scripts/scrub-personal.py --check`).
+- `docs/SETUP.md` — fresh machine → working install, written for someone who is
+  not the owner.
+- Ruff configured to a defect-focused rule set and the repo brought to **zero**
+  findings (78 → 0), including real exception-chaining fixes.
+
+### Security
+Repo verified publishable: no credential ever committed, no credential-shaped value
+in history, personal collection names scrubbed from 14 tracked files +
+`scripts/scrub-personal.py --check` gating it in CI.
+
+### Honest gaps
+- Author-based discovery is code-complete but IG is currently 429ing the profile
+  endpoint after a session of heavy use — needs a cooldown to verify end to end.
+- Local variant backfill was still running at write time (~306/665).
+- Two-pass extraction did not deliver what I predicted; it stays off.
+
+### Parked by owner request (Epic M, `docs/BACKLOG-120.md`)
+Model-provenance badges everywhere, per-reel local-vs-cloud diff in the reader, and
+**collection tags on every reel** (`front-end`, `topic-books`, `ai` — the tags you
+actually think in, as opposed to `educational`). Documented, not started.

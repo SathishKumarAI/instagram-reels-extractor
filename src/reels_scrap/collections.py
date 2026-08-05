@@ -29,7 +29,7 @@ def slugify(name: str) -> str:
 def parse_collection_url(url_or_id: str) -> tuple[str, str]:
     """Return (slug, numeric_id) from a saved-collection URL or bare id.
 
-    .../saved/front-end/18095255279194694/  ->  ("front-end", "18095255279194694")
+    .../saved/front-end/10000000000000004/  ->  ("front-end", "10000000000000004")
     A bare numeric id yields (that id, that id) — no readable name available.
     """
     if url_or_id.isdigit():
@@ -53,8 +53,8 @@ class Manifest:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
-    def from_path(cls, path: Path) -> "Manifest":
-        return cls(**json.loads(path.read_text()))
+    def from_path(cls, path: Path) -> Manifest:
+        return cls(**json.loads(path.read_text(encoding="utf-8")))
 
 
 def collections_dir(output_dir: Path) -> Path:
@@ -69,7 +69,7 @@ def manifest_path(output_dir: Path, slug: str) -> Path:
 
 def save_manifest(output_dir: Path, m: Manifest) -> Path:
     p = manifest_path(output_dir, m.slug)
-    p.write_text(m.to_json())
+    p.write_text(m.to_json(), encoding="utf-8")
     return p
 
 

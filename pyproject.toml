@@ -24,11 +24,12 @@ dependencies = [
     "fastapi>=0.110",   # research API backend
     "uvicorn>=0.29",    # ASGI server for `reels-scrap serve`
     "requests>=2.31",   # saved-collection feed client
+    "imageio-ffmpeg>=0.5",  # static ffmpeg — frame sampling for vision, not just transcript
 ]
 
 [project.optional-dependencies]
 # Spoken audio -> text. faster-whisper runs on CTranslate2 (NOT torch) → CPU-friendly.
-transcript = ["faster-whisper>=1.0", "imageio-ffmpeg>=0.5"]
+transcript = ["faster-whisper>=1.0"]
 # On-screen text (OCR). easyocr pulls torch+torchvision (multi-GB). GPU optional; CPU works
 # but is slow. See scripts/install-extraction.sh for the CPU-only torch wheel path.
 ocr = ["easyocr>=1.7"]
@@ -56,3 +57,25 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# Rules that catch real defects. Style-only families stay off — this is a
+# two-person codebase, not a style contest, and a red CI nobody trusts is worse
+# than no CI. Add a family here when it has actually caught a bug.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E501",     # line length — handled by the formatter, not worth failing a build
+    "B008",     # typer/pydantic put calls in defaults by design
+    "SIM105",   # contextlib.suppress is not clearer than try/except: pass here
+    "RUF001",   # our docs contain typographic quotes/dashes on purpose
+    "RUF002",
+    "RUF003",
+    "UP047",    # PEP-695 type params — 3.12 syntax churn for one helper, no defect
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017", "S101"]   # tests assert, and sometimes assert on broad excs

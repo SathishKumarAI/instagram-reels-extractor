@@ -11,7 +11,7 @@ from ..observability import log
 
 # accept instagram reel/post/tv permalinks only
 _REEL_URL_RE = re.compile(
-    r"^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/[A-Za-z0-9_-]+/?", re.I
+    r"^https?://(www\.)?instagram\.com/(reel|reels|p|tv)/[A-Za-z0-9_-]+/?", re.IGNORECASE
 )
 
 
@@ -39,7 +39,7 @@ def read_urls_file(path: str | Path) -> list[str]:
     if not p.exists():
         raise FileNotFoundError(f"urls_file not found: {p}")
     out, bad = [], []
-    for line in p.read_text().splitlines():
+    for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue

@@ -67,7 +67,7 @@ Legend for "build like engineer": each feature = one thin vertical slice
 | # | Feature | P | E | V | Notes |
 |---|---------|---|---|---|-------|
 | G1 | Scheduled sync (systemd/cron) | P0 | S | ★★★ | ☑ built |
-| G2 | Watch-and-retry on rate-limit | P1 | S | ★★ | ☑ tech-guff watcher |
+| G2 | Watch-and-retry on rate-limit | P1 | S | ★★ | ☑ example-profile watcher |
 | G3 | Post-sync summary notification | P2 | S | ★ | desktop notify |
 | G4 | Auto-backfill new fields | P2 | M | ★ | dep: B2 |
 | G5 | Webhook / RSS of new reels | P3 | M | ★ | feed |

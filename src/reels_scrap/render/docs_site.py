@@ -82,13 +82,13 @@ def build_site(reels: list[Reel], cfg: Config) -> Path:
                 shutil.copy(thumb, reels_dir / "assets" / r.thumbnail_path)
         nav_reels.append({r.title[:50] or r.id: f"reels/{r.id}.md"})
 
-    (docs / "index.md").write_text(_index_markdown(reels))
+    (docs / "index.md").write_text(_index_markdown(reels), encoding="utf-8")
 
     cfg_yml = dict(MKDOCS_YML)
     cfg_yml["docs_dir"] = "docs"
     cfg_yml["site_dir"] = str((out_root / "site").resolve())
     cfg_yml["nav"] = [{"Home": "index.md"}, {"Reels": nav_reels}]
-    (src / "mkdocs.yml").write_text(yaml.safe_dump(cfg_yml, sort_keys=False))
+    (src / "mkdocs.yml").write_text(yaml.safe_dump(cfg_yml, sort_keys=False), encoding="utf-8")
 
     subprocess.run(
         ["mkdocs", "build", "-f", str(src / "mkdocs.yml"), "--quiet"], check=True

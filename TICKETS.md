@@ -34,13 +34,13 @@ Status: ☐ todo · ◑ in progress · ☑ done
 
 ---
 
-## Session 2026-07-02 — phd-opportunities + incremental sync + envs
+## Session 2026-07-02 — topic-research + incremental sync + envs
 
 | # | Ticket | Status | Notes |
 |---|--------|--------|-------|
-| 13 | Fetch phd-opportunities saved collection → local | ☑ | `reels-scrap collection` (config-fast); 11 video reels ingested, 18 photo-posts have no video stream |
+| 13 | Fetch topic-research saved collection → local | ☑ | `reels-scrap collection` (config-fast); 11 video reels ingested, 18 photo-posts have no video stream |
 | 14 | Fix Chrome cookie auth (`sessionid`) | ☑ | root cause: lean venv skipped `secretstorage`; encrypted session cookie silently failed to decrypt |
-| 15 | Build consolidated HTML doc | ☑ | `output/collections/phd-opportunities.html` (1.8 MB, self-contained) + master index |
+| 15 | Build consolidated HTML doc | ☑ | `output/collections/topic-research.html` (1.8 MB, self-contained) + master index |
 | 16 | Serve React frontend + open in Chrome | ☑ | `reels-scrap serve --port 8010` (UI 200 / API 200); doc + index + UI opened in Chrome |
 | 17 | Two-track envs: lean `.venv` + full `conda` | ☑ | `environment.yml`; conda `reels-scrap` (py3.12 + ffmpeg) verified; venv gained `secretstorage` |
 | 18 | Data-eng incremental source poller | ☑ | `sources.json` registry + `sources.py` + `sync`/`add-source`/`list-sources`; shortcode-keyed dedup over shared pool |

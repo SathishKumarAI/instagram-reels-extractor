@@ -21,7 +21,7 @@ trapped in a scroll feed. Existing scrapers dump media; none extract *meaning*.
 |---------|------|
 | **Primary — the archivist (you)** | one place to search + categorize everything saved, locally, privately |
 | Researcher | pull a topic (e.g. "PhD interview tips") across collections with citations |
-| Job-seeker | filter jobs/internships reels, export to a sheet, track to-apply |
+| Job-seeker | filter jobs/topic-jobs reels, export to a sheet, track to-apply |
 
 ## 3. Goals / non-goals
 
@@ -61,7 +61,7 @@ extraction · usable dashboard.
 | P1 | **Account/profile facet everywhere** — source + author as first-class filters; per-account tab | this session's ask; group by where a reel came from |
 | P1 | **Scheduled sync** (cron/systemd) | incremental + dead-letter make it safe to automate |
 | P1 | **Global omnisearch** (semantic + tag + text) in top bar | `/api/search` exists |
-| P2 | **Saved views / smart collections** (jobs+internships, AI-this-month) | cross-collection filters |
+| P2 | **Saved views / smart collections** (jobs+topic-jobs, AI-this-month) | cross-collection filters |
 | P2 | **Status flags** (read/starred/to-apply/archived) | turns archive into a workflow |
 | P2 | **Export** Markdown/Notion/xlsx (beyond CSV) | reuse render layer |
 | P3 | **Local-LLM vision** (LLaVA/moondream) | closes the one egress point |

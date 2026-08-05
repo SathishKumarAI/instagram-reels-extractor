@@ -23,7 +23,13 @@ from .collections import (
     save_manifest,
 )
 from .config import Config
-from .render.consolidated import CollectionCard, DocMeta, data_uri, render_doc, render_index
+from .render.consolidated import (
+    CollectionCard,
+    DocMeta,
+    data_uri,
+    render_doc,
+    render_index,
+)
 
 ALL_SLUG = "all-saved"
 
@@ -33,7 +39,7 @@ def _load_record(data_dir: Path, reel_id: str) -> dict | None:
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
 
@@ -42,7 +48,7 @@ def load_records(data_dir: Path, ids: list[str] | None = None) -> list[dict]:
     """Load reel JSON dicts. With `ids`, keep that order and skip any missing."""
     if ids is not None:
         return [r for r in (_load_record(data_dir, i) for i in ids) if r]
-    return [json.loads(p.read_text()) for p in sorted(data_dir.glob("*.json"))]
+    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(data_dir.glob("*.json"))]
 
 
 def build_collection_doc(cfg: Config, m: Manifest) -> tuple[Path, int]:
@@ -54,7 +60,7 @@ def build_collection_doc(cfg: Config, m: Manifest) -> tuple[Path, int]:
         data_dir=cfg.data_dir,
     )
     out = collections_dir(cfg.output_dir) / f"{m.slug}.html"
-    out.write_text(html)
+    out.write_text(html, encoding="utf-8")
     return out, len(reels)
 
 
@@ -74,7 +80,7 @@ def build_master_index(cfg: Config) -> Path:
             )
         )
     out = collections_dir(cfg.output_dir) / "index.html"
-    out.write_text(render_index(cards))
+    out.write_text(render_index(cards), encoding="utf-8")
     return out
 
 

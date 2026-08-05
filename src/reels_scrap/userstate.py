@@ -24,7 +24,7 @@ def _path(output_dir: Path, name: str) -> Path:
 
 def load_annotations(output_dir: Path) -> dict:
     p = _path(output_dir, ANNOTATIONS)
-    return json.loads(p.read_text()) if p.exists() else {}
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
 def annotate(output_dir: Path, reel_id: str, patch: dict) -> dict:
@@ -37,24 +37,24 @@ def annotate(output_dir: Path, reel_id: str, patch: dict) -> dict:
     if "note" in patch:
         cur["note"] = str(patch["note"])[:2000]
     data[reel_id] = cur
-    _path(output_dir, ANNOTATIONS).write_text(json.dumps(data, indent=2) + "\n")
+    _path(output_dir, ANNOTATIONS).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return cur
 
 
 def load_views(output_dir: Path) -> list[dict]:
     p = _path(output_dir, VIEWS)
-    return json.loads(p.read_text()) if p.exists() else []
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
 
 
 def save_view(output_dir: Path, name: str, filters: dict) -> list[dict]:
     """Add or replace a saved view by name. Returns the full list."""
     views = [v for v in load_views(output_dir) if v.get("name") != name]
     views.append({"name": name, "filters": filters})
-    _path(output_dir, VIEWS).write_text(json.dumps(views, indent=2) + "\n")
+    _path(output_dir, VIEWS).write_text(json.dumps(views, indent=2) + "\n", encoding="utf-8")
     return views
 
 
 def delete_view(output_dir: Path, name: str) -> list[dict]:
     views = [v for v in load_views(output_dir) if v.get("name") != name]
-    _path(output_dir, VIEWS).write_text(json.dumps(views, indent=2) + "\n")
+    _path(output_dir, VIEWS).write_text(json.dumps(views, indent=2) + "\n", encoding="utf-8")
     return views

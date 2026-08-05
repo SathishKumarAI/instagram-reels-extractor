@@ -22,7 +22,7 @@ Next, to make it a genuinely usable product:
 | **Cost dashboard** — $ from tokens (model price × in/out), per-collection spend, per-run cost | ★★★ | S | `total_cost_usd` is already in the claude envelope; surface it |
 | **Tag pages / tag cloud** — click a tag → all reels across collections | ★★☆ | S | tags exist; add a `/tags` route + `/api/reels?tag=` filter |
 | **Global search bar** in the dashboard (semantic + tag + text) | ★★★ | M | `/api/search` exists; wire a top-bar omnisearch |
-| **Saved views / smart collections** (e.g. "all jobs+internships", "AI this month") | ★★☆ | M | cross-collection filters over genre+tag+date |
+| **Saved views / smart collections** (e.g. "all jobs+topic-jobs", "AI this month") | ★★☆ | M | cross-collection filters over genre+tag+date |
 | **Export** — Markdown / CSV / Notion per collection | ★★☆ | S | reuse render layer; add `/api/export` |
 | **Scheduled sync** — cron/systemd timer running `sync` nightly | ★★★ | S | incremental + dead-letter already make it safe to automate |
 | **Reel status flags** — read/unread, starred, archived, "to-apply" | ★★☆ | M | turns the archive into an actionable workflow |
