@@ -197,3 +197,22 @@ def test_parse_json_still_reads_a_fenced_object():
 def test_parse_json_without_any_object_names_the_output():
     with pytest.raises(ValueError, match="no JSON object"):
         vision._parse_json("I cannot read these frames.")
+
+
+def test_bare_string_facts_are_kept_ungrounded(monkeypatch, tmp_path):
+    """A small model answers `"facts": ["…"]` — a claim with no frame.
+
+    Counting that as "found nothing" would blame the model for the wrong failure.
+    """
+    import requests
+
+    payload = dict(VALID, facts=["five github repos for a homelab setup",
+                                 "coolify is a self-hostable heroku alternative"])
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp(_openai_payload(json.dumps(payload))))
+    monkeypatch.setattr(vision, "_frames_with_time", lambda r, c: _items(tmp_path))
+
+    reel = Reel(id="X", url="https://instagram.com/reel/X/")
+    vision.add_summary(reel, _cfg())
+    assert [f.text for f in reel.facts] == ["five github repos for a homelab setup",
+                                            "coolify is a self-hostable heroku alternative"]
+    assert reel.facts[0].timestamp is None      # ungrounded, and honest about it

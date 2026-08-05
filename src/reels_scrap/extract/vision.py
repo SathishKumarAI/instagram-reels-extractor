@@ -161,6 +161,13 @@ def _unwrap_structured(structured, genre: str) -> dict:
 
 
 _FRAGMENT_TAILS = (" and", " the", " a", " to", " of", " so", " but", " that", " with")
+# words a sliced caption tends to open on — a real claim opens on its subject
+_FRAGMENT_HEADS = {
+    "the", "a", "an", "and", "but", "so", "or", "of", "to", "that", "this", "these",
+    "those", "it", "its", "they", "them", "you", "your", "we", "our", "he", "she",
+    "his", "her", "in", "on", "at", "for", "with", "from", "by", "as", "if", "then",
+    "because", "when", "while", "which", "who", "what",
+}
 
 
 def _is_fragment(text: str) -> bool:
@@ -174,12 +181,13 @@ def _is_fragment(text: str) -> bool:
     words = t.split()
     if len(words) < 4:
         return True
-    # a claim starting mid-sentence, e.g. "aspiring software engineer needs to";
-    # list markers and handles legitimately start lowercase, so exempt them
-    if (t[:1].islower() and not t[:1].isdigit()
-            and not re.match(r"^(no\.?\s*\d|\d|#|@|https?://)", t, re.I)):
-        return True
-    return any(t.lower().endswith(tail) for tail in _FRAGMENT_TAILS)
+    if any(t.lower().endswith(tail) for tail in _FRAGMENT_TAILS):
+        return True   # trails off mid-sentence: "aspiring software engineer needs to"
+    # A slice that STARTS mid-sentence opens on a function word: "the only way you".
+    # Lower case alone is not the signal — several local models write every claim in
+    # lower case, and rejecting those counted the model as having found nothing when
+    # it had only failed to capitalise.
+    return words[0].lower() in _FRAGMENT_HEADS and t[:1].islower()
 
 
 def _dedupe_facts(facts: list[Fact]) -> list[Fact]:
@@ -229,6 +237,11 @@ def _apply(reel: Reel, data: dict) -> None:
     reel.structured = _unwrap_structured(data.get("structured"), reel.genre)
     facts = []
     for f in data.get("facts", []) or []:
+        # smaller models answer `"facts": ["…", "…"]` — a claim without its frame.
+        # Dropping those silently would count a model as having found nothing when
+        # it only failed to ground what it found.
+        if isinstance(f, str):
+            f = {"text": f}
         if not isinstance(f, dict) or not f.get("text"):
             continue
         if _is_fragment(str(f["text"])):

@@ -22,6 +22,10 @@ def test_real_claims_survive():
         "no. 2 WEBDEV FOR BEGINNERS",
         "Project Based Learning is the first recommended repository",
         "2026 pricing starts at $20 per month",
+        # lower case is how several local models write every claim; rejecting these
+        # counted the model as having found nothing when it had found something
+        "five github repos for self-hosting a homelab",
+        "coolify is a self-hostable heroku alternative",
     ]:
         assert not _is_fragment(good), good
 
