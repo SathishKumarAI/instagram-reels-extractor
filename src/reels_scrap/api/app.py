@@ -666,17 +666,22 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         reg = {r["name"]: r for r in status()}
         out = []
         for name in list_profiles(config_path):
-            r = reg.get(name, {})
+            r = reg.get(name)
             declared = cfg.extract.vision_profiles.get(name)
-            kind = declared.kind if declared else ("local" if name == "local" else name)
-            model = (declared.model if declared else "") or r.get("tag", "")
+            if declared is not None:
+                kind = declared.kind
+            elif r is not None or name == "local":
+                kind = "local"          # registry models all run on the local endpoint
+            else:
+                kind = name             # claude-cli / api — the cloud arms
+            model = (declared.model if declared else "") or (r["tag"] if r else "")
             out.append({
                 "name": name,
                 "kind": kind,
                 "model": model,
-                # cloud arms need no download; local ones must be pulled first
-                "installed": True if kind != "local" else bool(r.get("installed", name == "local")),
-                "notes": (declared.notes if declared else "") or r.get("role", ""),
+                # a cloud arm needs no download; a local one must be pulled first
+                "installed": bool(r["installed"]) if r is not None else True,
+                "notes": (declared.notes if declared else "") or (r["role"] if r else ""),
             })
         return out
 

@@ -113,6 +113,9 @@ def _from_registry(entry, base_config: str | Path) -> Config:
     lc = cfg.extract.vision_local
     lc.model = entry.built_name
     lc.timeout = max(lc.timeout, 300.0)
+    # Reasoning models (qwen3-vl) think before they answer, and a 1500-token budget
+    # is spent before the JSON closes — measured: two truncated replies at 1500.
+    lc.max_tokens = max(lc.max_tokens, 4000)
     cfg.extract.vision_backend = "local"
     cfg.extract.vision_local_fallback = False
     if not lc.base_url:

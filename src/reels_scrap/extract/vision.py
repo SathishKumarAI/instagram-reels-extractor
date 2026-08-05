@@ -253,12 +253,18 @@ def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
         capture_output=True, text=True, timeout=CLI_TIMEOUT,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI failed: {proc.stderr.strip()[:200]}")
+        raise RuntimeError(f"claude CLI failed: {(proc.stderr or '').strip()[:200]}")
     tokens: dict[str, float] = {}
+    # exit 0 with nothing on stdout happens (a refused/empty turn). Say that, rather
+    # than letting json.loads(None) surface as a TypeError with no context.
+    if not proc.stdout:
+        raise RuntimeError(
+            f"claude CLI returned no output: {(proc.stderr or '').strip()[:200] or 'empty stdout'}"
+        )
     text = proc.stdout
     try:
         env = json.loads(proc.stdout)
-        text = env.get("result", proc.stdout)
+        text = env.get("result") or proc.stdout   # `result: null` on an errored turn
         u = env.get("usage", {}) or {}
         # keep components separate: cache_read is ~free (~10% price) and is mostly the
         # CLI's own system-prompt/tools reloaded each call — NOT reel content.
@@ -341,7 +347,21 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     if resp.status_code != 200:
         raise RuntimeError(f"local vision HTTP {resp.status_code}: {resp.text[:200]}")
     payload = resp.json()
-    text = payload["choices"][0]["message"]["content"]
+    choice = payload["choices"][0]
+    msg = choice.get("message", {}) or {}
+    text = (msg.get("content") or "").strip()
+    if not text:
+        # Reasoning models (qwen3-vl and friends) put their draft in `reasoning` and
+        # can return an empty `content` when the budget runs out mid-thought. The
+        # JSON is usually in the reasoning; if it is not, say WHY rather than
+        # reporting an empty model output.
+        text = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
+        if not text:
+            raise RuntimeError(
+                f"local vision returned no content (finish_reason="
+                f"{choice.get('finish_reason')!r}, max_tokens={lc.max_tokens}) — "
+                "a reasoning model needs a larger max_tokens"
+            )
     u = payload.get("usage", {}) or {}
     tokens = {
         "input": int(u.get("prompt_tokens", 0)),

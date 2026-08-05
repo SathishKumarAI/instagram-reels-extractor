@@ -143,3 +143,31 @@ def test_two_pass_reads_then_structures(tmp_path, monkeypatch):
     assert reel.genre == "tutorial"
     assert reel.tokens["backend"] == "local"
     assert reel.tokens["passes"] == 2
+
+
+def test_reasoning_model_with_empty_content_falls_back_to_reasoning(monkeypatch, tmp_path):
+    """qwen3-vl thinks before it answers and can return an empty `content`.
+
+    The JSON is in `reasoning`; treating the reply as "no output" threw away a
+    usable answer and cost 59s of GPU per reel.
+    """
+    import requests
+
+    payload = {
+        "choices": [{"message": {"content": "", "reasoning": f"Let me see. {json.dumps(VALID)}"},
+                     "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 900},
+    }
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp(payload))
+    data, tokens = vision._via_local(Reel(id="X", url="u"), _cfg(), _items(tmp_path))
+    assert data["genre"] == "tutorial"
+    assert tokens["output"] == 900
+
+
+def test_no_content_at_all_says_why(monkeypatch, tmp_path):
+    import requests
+
+    payload = {"choices": [{"message": {"content": ""}, "finish_reason": "length"}], "usage": {}}
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _Resp(payload))
+    with pytest.raises(RuntimeError, match="max_tokens"):
+        vision._via_local(Reel(id="X", url="u"), _cfg(), _items(tmp_path))

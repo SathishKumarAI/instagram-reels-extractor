@@ -43,6 +43,22 @@ def test_provenance_and_collections(cfg, tmp_path):
     assert detail["tokens"]["model"] == "reels-vision"
 
 
+def test_profiles_endpoint_marks_uninstalled_models(cfg, tmp_path, monkeypatch):
+    """The picker must not offer a model that would fail at run time."""
+    import reels_scrap.modelreg as modelreg
+
+    monkeypatch.setattr(modelreg, "installed_models", lambda: {"here"})
+    monkeypatch.setattr(modelreg, "load_registry", lambda path=modelreg.REGISTRY_FILE: [
+        modelreg.ModelEntry(name="here", tag="fam:8b", role="installed one"),
+        modelreg.ModelEntry(name="gone", tag="fam:2b", role="not pulled yet"),
+    ])
+    client = TestClient(appmod.create_app(str(tmp_path / "config.yaml")))
+    rows = {p["name"]: p for p in client.get("/api/profiles").json()}
+    assert rows["here"]["installed"] is True and rows["here"]["kind"] == "local"
+    assert rows["gone"]["installed"] is False
+    assert rows["claude-cli"]["installed"] is True and rows["claude-cli"]["kind"] == "claude-cli"
+
+
 def test_knowledge_endpoint(cfg, tmp_path):
     client = TestClient(appmod.create_app(str(tmp_path / "config.yaml")))
     kb = client.get("/api/knowledge").json()
