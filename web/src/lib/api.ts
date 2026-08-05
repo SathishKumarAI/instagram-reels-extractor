@@ -173,8 +173,6 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
   return r.json();
 }
 
-export type SyncBackend = "claude-cli" | "api" | "local";
-
 /** A named model the bench or the Compare tab can run. `installed` is false for
  *  a model that is in models.yaml but has not been pulled yet. */
 export interface VisionProfile {
@@ -255,6 +253,8 @@ export interface ScoreRow {
   avg_seconds: number;
   avg_structured_fields: number;
   cost_usd: number;
+  /** what one reel costs on this model — see docs/research/COSTS.md */
+  cost_per_reel: number;
 }
 export interface Scoreboard {
   reels_compared: number;
@@ -300,7 +300,8 @@ export const api = {
   addSource: (url: string, name = "", type = "collection") =>
     post<Source>("/api/sources", { url, name, type }),
   toggleSource: (name: string) => post<Source>(`/api/sources/${encodeURIComponent(name)}/toggle`),
-  sync: (backend: SyncBackend, only?: string[]) => post<SyncStatus>("/api/sync", { backend, only }),
+  // any profile name from /api/profiles, not just the three original backends
+  sync: (backend: string, only?: string[]) => post<SyncStatus>("/api/sync", { backend, only }),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
   profiles: () => get<VisionProfile[]>("/api/profiles"),
   // profile names, not the three fixed backends — any installed model can be an arm

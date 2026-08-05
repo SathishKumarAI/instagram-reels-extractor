@@ -53,7 +53,8 @@ def installed_models() -> set[str]:
     if not shutil.which("ollama"):
         return set()
     try:
-        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=30)
+        r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=30,
+                           encoding="utf-8", errors="replace")
     except (OSError, subprocess.SubprocessError):
         return set()
     names = set()
@@ -96,7 +97,10 @@ def write_modelfile(entry: ModelEntry, directory: Path = MODELFILE_DIR) -> Path:
 
 
 def _run(cmd: list[str], timeout: float) -> tuple[int, str]:
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    # ollama's progress bars carry box-drawing bytes; Windows text mode defaults to
+    # cp1252 and a reader thread dies on them mid-pull. Decode as utf-8, replace.
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                       encoding="utf-8", errors="replace")
     return r.returncode, (r.stderr or r.stdout or "").strip()[:400]
 
 

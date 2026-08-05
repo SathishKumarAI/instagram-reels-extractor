@@ -254,6 +254,9 @@ def scoreboard(cfg: Config, reel_ids: list[str] | None = None) -> dict:
             "avg_seconds": round(d["seconds"] / n, 2),
             "avg_structured_fields": round(d["structured_fields"] / n, 2),
             "cost_usd": round(d["cost_usd"], 4),
+            # what one reel costs on this model — the number you actually decide on.
+            # See docs/research/COSTS.md for what each backend's figure means.
+            "cost_per_reel": round(d["cost_usd"] / n, 4),
         })
     rows.sort(key=lambda r: -r["avg_facts"])
     return {

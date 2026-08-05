@@ -88,3 +88,20 @@ def test_chat_endpoint(cfg, tmp_path, monkeypatch):
     body = r.json()
     assert body["answer"] == "answer [AAA]"
     assert body["citations"][0]["reel_id"] == "AAA"
+
+
+def test_sync_rejects_unknown_and_uninstalled_models(cfg, tmp_path, monkeypatch):
+    """The UI is not the only guard: the API must refuse a model it cannot run."""
+    import reels_scrap.modelreg as modelreg
+
+    monkeypatch.setattr(modelreg, "installed_models", lambda: set())
+    monkeypatch.setattr(modelreg, "load_registry", lambda path=modelreg.REGISTRY_FILE: [
+        modelreg.ModelEntry(name="not-pulled", tag="fam:8b"),
+    ])
+    client = TestClient(appmod.create_app(str(tmp_path / "config.yaml")))
+
+    r = client.post("/api/sync", json={"backend": "no-such-model"})
+    assert r.status_code == 400 and "claude-cli" in r.json()["detail"]
+
+    r = client.post("/api/sync", json={"backend": "not-pulled"})
+    assert r.status_code == 400 and "models pull not-pulled" in r.json()["detail"]

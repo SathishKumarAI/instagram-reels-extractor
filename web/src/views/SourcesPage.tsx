@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Source, type SyncBackend } from "@/lib/api";
+import { api, type Source } from "@/lib/api";
+import { ModelSelect, useProfiles } from "@/components/ModelSelect";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Cloud, Cpu, Download, Link2, Play, Plus, RefreshCw } from "lucide-react";
+import { Download, Link2, Play, Plus, RefreshCw } from "lucide-react";
 
 function SyncPanel() {
-  const [backend, setBackend] = useState<SyncBackend>("claude-cli");
+  const [backend, setBackend] = useState("claude-cli");
+  const profiles = useProfiles();
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState<string>("");
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,21 +47,6 @@ function SyncPanel() {
     }
   };
 
-  const opt = (v: SyncBackend, Icon: typeof Cpu, label: string, sub: string) => (
-    <button
-      onClick={() => setBackend(v)}
-      disabled={running}
-      className={`flex flex-1 items-start gap-2 rounded-lg border p-3 text-left transition-colors disabled:opacity-60 ${
-        backend === v ? "border-mauve bg-mauve/10" : "border-surface0 hover:bg-surface0/60"
-      }`}
-    >
-      <Icon size={18} className={backend === v ? "text-mauve" : "text-overlay0"} />
-      <div>
-        <div className={`text-sm font-medium ${backend === v ? "text-mauve" : "text-text"}`}>{label}</div>
-        <div className="text-xs text-overlay0">{sub}</div>
-      </div>
-    </button>
-  );
 
   return (
     <Card className="mb-4">
@@ -67,11 +54,8 @@ function SyncPanel() {
         <div className="flex items-center gap-2 text-sm font-medium text-text">
           <RefreshCw size={16} /> Sync now — pull latest reels
         </div>
-        <div className="text-xs text-overlay0">Vision backend for this run:</div>
-        <div className="flex flex-wrap gap-2">
-          {opt("claude-cli", Cloud, "Claude code", "hosted vision · needs no GPU")}
-          {opt("local", Cpu, "Local GPU box", "your endpoint · private, no egress")}
-        </div>
+        <div className="text-xs text-overlay0">Model for this run:</div>
+        <ModelSelect value={backend} onChange={setBackend} profiles={profiles} disabled={running} />
         <div className="flex items-center gap-3">
           <Button onClick={start} disabled={running}>
             <Play size={14} /> {running ? "Syncing…" : "Sync now"}

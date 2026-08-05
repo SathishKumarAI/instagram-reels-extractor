@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type SyncBackend, type SyncStatus } from "@/lib/api";
+import { api, type SyncStatus } from "@/lib/api";
+import { ModelSelect, useProfiles } from "@/components/ModelSelect";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Cloud, Cpu, Play } from "lucide-react";
+import { Activity, Play } from "lucide-react";
 
 const STAGE_LABEL: Record<string, string> = {
   enumerate: "Enumerate",
@@ -155,8 +156,9 @@ function SourceTable({ s }: { s: SyncStatus }) {
 
 export default function SyncPage() {
   const [s, setS] = useState<SyncStatus | null>(null);
-  const [backend, setBackend] = useState<SyncBackend>("claude-cli");
+  const [backend, setBackend] = useState("claude-cli");
   const [err, setErr] = useState("");
+  const profiles = useProfiles();
 
   useEffect(() => {
     let alive = true;
@@ -215,22 +217,12 @@ export default function SyncPage() {
           <Button onClick={start} disabled={live}>
             <Play size={14} /> {live ? "Syncing…" : "Sync now"}
           </Button>
-          <button
-            onClick={() => setBackend("claude-cli")}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${
-              backend === "claude-cli" ? "border-mauve text-mauve" : "border-surface0 text-subtext"
-            }`}
-          >
-            <Cloud size={14} /> Claude code
-          </button>
-          <button
-            onClick={() => setBackend("local")}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${
-              backend === "local" ? "border-mauve text-mauve" : "border-surface0 text-subtext"
-            }`}
-          >
-            <Cpu size={14} /> Local GPU
-          </button>
+          <ModelSelect
+            value={backend}
+            onChange={setBackend}
+            profiles={profiles}
+            disabled={live}
+          />
           <span className="text-xs text-overlay0">
             {totals.ingested} ingested · {totals.failed} dead-lettered · {totals.errors} source
             error(s)

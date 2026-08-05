@@ -8,12 +8,17 @@ import {
   type Variant,
   type VisionProfile,
 } from "@/lib/api";
+import { ModelSelect } from "@/components/ModelSelect";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Cloud, Cpu, Play, Scale, X } from "lucide-react";
 
 const ICON: Record<string, typeof Cloud> = { "claude-cli": Cloud, local: Cpu };
+
+/** Sub-cent figures need 4 decimals; a total needs 2. Raw floats read as gibberish. */
+const fmtUsd = (n: number) =>
+  n === 0 ? "$0" : n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
 
 function Metric({ label, a, b, better }: {
   label: string; a: number | string; b: number | string; better?: "high" | "low";
@@ -97,28 +102,6 @@ function Diff({ result }: { result: CompareResult }) {
   );
 }
 
-// A model that is declared but not pulled would fail at run time — say so here instead.
-function ProfilePicker({ profiles, value, onChange }: {
-  profiles: VisionProfile[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-md border border-surface0 bg-base px-2 py-2 text-sm text-text"
-      title="which model to run"
-    >
-      {(profiles.length ? profiles : [{ name: value, installed: true, model: "", kind: "", notes: "" }]).map((p) => (
-        <option key={p.name} value={p.name} disabled={!p.installed}>
-          {p.name}{p.installed ? "" : " (not installed)"}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 export default function ComparePage() {
   const [reels, setReels] = useState<ReelSummary[]>([]);
   const [reelId, setReelId] = useState("");
@@ -188,17 +171,9 @@ export default function ComparePage() {
               <option key={r.id} value={r.id}>{r.title?.slice(0, 70) || r.id}</option>
             ))}
           </select>
-          <ProfilePicker
-            profiles={profiles}
-            value={pair[0]}
-            onChange={(v) => setPair([v, pair[1]])}
-          />
+          <ModelSelect profiles={profiles} value={pair[0]} onChange={(v) => setPair([v, pair[1]])} />
           <span className="text-xs text-overlay0">vs</span>
-          <ProfilePicker
-            profiles={profiles}
-            value={pair[1]}
-            onChange={(v) => setPair([pair[0], v])}
-          />
+          <ModelSelect profiles={profiles} value={pair[1]} onChange={(v) => setPair([pair[0], v])} />
           <Button onClick={runOne} disabled={busy || !reelId || pair[0] === pair[1]}>
             <Play size={14} /> {busy ? "Running both…" : "Compare this reel"}
           </Button>
@@ -290,7 +265,8 @@ export default function ComparePage() {
                     <th className="py-1 pr-3 font-medium">Summary</th>
                     <th className="py-1 pr-3 font-medium">Fields</th>
                     <th className="py-1 pr-3 font-medium">Sec</th>
-                    <th className="py-1 font-medium">Cost</th>
+                    <th className="py-1 pr-3 font-medium">$/reel</th>
+                    <th className="py-1 font-medium">$ total</th>
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
@@ -306,8 +282,11 @@ export default function ComparePage() {
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_summary_chars}</td>
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_structured_fields}</td>
                       <td className="py-1.5 pr-3 text-subtext">{b.avg_seconds}</td>
+                      <td className={`py-1.5 pr-3 ${b.cost_per_reel > 0 ? "text-peach" : "text-green"}`}>
+                        {fmtUsd(b.cost_per_reel)}
+                      </td>
                       <td className={`py-1.5 ${b.cost_usd > 0 ? "text-peach" : "text-green"}`}>
-                        ${b.cost_usd}
+                        {fmtUsd(b.cost_usd)}
                       </td>
                     </tr>
                   ))}
@@ -317,6 +296,18 @@ export default function ComparePage() {
           ) : (
             <p className="text-sm text-overlay0">
               Nothing compared yet. Run a batch — averages over one reel are not evidence.
+            </p>
+          )}
+          {board && board.backends.length > 0 && (
+            <p className="mt-3 text-xs leading-5 text-overlay0">
+              <span className="text-subtext">What the cost column means.</span>{" "}
+              <code className="rounded bg-surface0 px-1">claude-cli</code> is the CLI's own
+              <code className="ml-1 rounded bg-surface0 px-1">total_cost_usd</code> — what that
+              turn would cost on the API, including the CLI's cached system prompt, not money
+              taken from a subscription.{" "}
+              <code className="rounded bg-surface0 px-1">api</code> is priced from real token
+              usage. Local models are $0: your own GPU, nothing billed. Full method in{" "}
+              <code className="rounded bg-surface0 px-1">docs/research/COSTS.md</code>.
             </p>
           )}
           {batch?.errors?.length ? (

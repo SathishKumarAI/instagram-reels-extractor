@@ -98,3 +98,21 @@ def test_scoreboard_averages_per_backend(cfg):
 def test_scoreboard_ignores_reels_without_variants(cfg):
     Reel(id="BBB", url="https://ig/BBB").save(cfg.data_dir)
     assert scoreboard(cfg)["reels_compared"] == 0
+
+
+def test_scoreboard_reports_cost_per_reel(cfg):
+    """The decision is per reel — a total says nothing without the denominator."""
+    from reels_scrap.compare import scoreboard
+    from reels_scrap.models import Reel
+
+    for i, cost in enumerate([0.30, 0.50]):
+        r = Reel(id=f"C{i}", url=f"https://insta/reel/C{i}/", title=f"c{i}")
+        r.variants = {"claude-cli": {"backend": "claude-cli", "model": "claude", "facts": [],
+                                     "tags": [], "summary": "", "structured": {},
+                                     "tokens": {"cost_usd": cost}, "elapsed_s": 20}}
+        r.save(cfg.data_dir)
+
+    row = next(b for b in scoreboard(cfg)["backends"] if b["backend"] == "claude-cli")
+    assert row["reels"] == 2
+    assert row["cost_usd"] == 0.8
+    assert row["cost_per_reel"] == 0.4

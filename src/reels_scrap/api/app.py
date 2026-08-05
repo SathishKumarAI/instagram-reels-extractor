@@ -45,7 +45,7 @@ class SourceIn(BaseModel):
 
 
 class SyncIn(BaseModel):
-    backend: str = "claude-cli"       # claude-cli | api | local
+    backend: str = "claude-cli"       # any profile name — see GET /api/profiles
     browser: str = "chrome"
     only: list[str] | None = None
 
@@ -595,11 +595,22 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
     def sync_ep(body: SyncIn) -> dict:
         """Kick off an incremental sync in the background with a chosen vision backend.
         The UI picks Claude-code vs the local GPU box here."""
+        from ..modelreg import status as model_status
+        from ..profiles import list_profiles
+
         if _SYNC["running"]:
             raise HTTPException(409, "a sync is already running")
         backend = body.backend
-        if backend not in {"claude-cli", "api", "local"}:
-            raise HTTPException(400, "backend must be claude-cli | api | local")
+        known = list_profiles(config_path)
+        if backend not in known:
+            raise HTTPException(400, f"unknown model {backend!r} — known: {', '.join(known)}")
+
+        # a registry model that was never pulled would fail per reel, mid-run
+        missing = {r["name"] for r in model_status() if not r["installed"]}
+        if backend in missing:
+            raise HTTPException(
+                400, f"model {backend!r} is not installed — run `reels-scrap models pull {backend}`"
+            )
 
         def _job():
             from ..compare import cfg_for_backend
