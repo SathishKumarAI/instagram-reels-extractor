@@ -8,7 +8,6 @@ facts one backend grounded in a frame and the other did not.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from .config import Config
 from .models import Reel
@@ -75,21 +74,14 @@ def diff_facts(a: list[dict], b: list[dict]) -> dict:
 
 
 def cfg_for_backend(backend: str, base_config: str = "config.yaml") -> Config:
-    """Config to run one backend with.
+    """Config to run one backend — now one named profile. See `profiles.py`.
 
-    `local` needs `vision_local.base_url`, which only `config-local.yaml` carries —
-    fall back to the base config if that file is gone.
+    Kept under the old name because the CLI, the sync endpoint and this module's
+    own callers were written when a backend was all there was.
     """
-    if backend == "local":
-        p = Path("config-local.yaml")
-        if p.exists():
-            cfg = Config.load(str(p))
-            cfg.extract.vision_backend = "local"
-            cfg.extract.vision_local_fallback = False   # a fallback would fake the result
-            return cfg
-    cfg = Config.load(base_config)
-    cfg.extract.vision_backend = backend
-    return cfg
+    from .profiles import resolve_profile
+
+    return resolve_profile(backend, base_config)
 
 
 def compare_reel(
@@ -127,6 +119,88 @@ def compare_reel(
         (na, va), (nb, vb) = list(results.items())
         diff = {"a": na, "b": nb, **diff_facts(va["facts"], vb["facts"])}
     return {"reel_id": reel_id, "variants": results, "errors": errors, "diff": diff}
+
+
+def agreement(cfg: Config, reference: str = "claude-cli",
+              reel_ids: list[str] | None = None) -> dict[str, dict]:
+    """Per profile: how its claims line up with a reference arm's, on shared reels.
+
+    Only reels where BOTH arms produced a variant count — comparing a model on the
+    reels it managed against a reference on all of them would flatter the weaker
+    model, which is the exact error this bench exists to avoid.
+    """
+    out: dict[str, dict] = {}
+    wanted = set(reel_ids) if reel_ids else None
+
+    for p in sorted(cfg.data_dir.glob("*.json")):
+        if wanted is not None and p.stem not in wanted:
+            continue
+        variants = (Reel.load(p).variants or {})
+        ref = variants.get(reference)
+        if not ref:
+            continue
+        for name, v in variants.items():
+            if name == reference:
+                continue
+            d = diff_facts(ref.get("facts", []), v.get("facts", []))
+            e = out.setdefault(name, {"profile": name, "reels": 0, "shared": 0,
+                                      "only_reference": 0, "only_candidate": 0})
+            e["reels"] += 1
+            e["shared"] += len(d["shared"])
+            e["only_reference"] += len(d["only_a"])
+            e["only_candidate"] += len(d["only_b"])
+
+    for e in out.values():
+        total = e["shared"] + e["only_reference"] + e["only_candidate"]
+        e["reference"] = reference
+        e["agreement"] = round(e["shared"] / total, 3) if total else None
+        e["missed_per_reel"] = round(e["only_reference"] / e["reels"], 2) if e["reels"] else None
+        e["added_per_reel"] = round(e["only_candidate"] / e["reels"], 2) if e["reels"] else None
+    return out
+
+
+def disagreement_examples(cfg: Config, reference: str = "claude-cli",
+                          limit: int = 40, reel_ids: list[str] | None = None) -> list[dict]:
+    """Real disagreeing claims, spread across profiles — the input to the analysis.
+
+    Claim text only: no frames, no caption, no account handle leaves the machine.
+    """
+    per_profile: dict[str, list[dict]] = {}
+    wanted = set(reel_ids) if reel_ids else None
+
+    for p in sorted(cfg.data_dir.glob("*.json")):
+        if wanted is not None and p.stem not in wanted:
+            continue
+        variants = (Reel.load(p).variants or {})
+        ref = variants.get(reference)
+        if not ref:
+            continue
+        for name, v in variants.items():
+            if name == reference:
+                continue
+            d = diff_facts(ref.get("facts", []), v.get("facts", []))
+            if not d["only_a"] and not d["only_b"]:
+                continue
+            per_profile.setdefault(name, []).append({
+                "model": name,
+                "reference_summary": (ref.get("summary") or "")[:400],
+                "candidate_summary": (v.get("summary") or "")[:400],
+                "only_reference": d["only_a"][:6],
+                "only_candidate": d["only_b"][:6],
+            })
+
+    # round-robin so one prolific model cannot crowd the others out of the sample
+    out: list[dict] = []
+    queues = [iter(v) for v in per_profile.values()]
+    while queues and len(out) < limit:
+        for q in list(queues):
+            try:
+                out.append(next(q))
+            except StopIteration:
+                queues.remove(q)
+            if len(out) >= limit:
+                break
+    return out
 
 
 def scoreboard(cfg: Config) -> dict:

@@ -6,6 +6,7 @@ import {
   type ReelSummary,
   type Scoreboard,
   type Variant,
+  type VisionProfile,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,28 @@ function Diff({ result }: { result: CompareResult }) {
   );
 }
 
+// A model that is declared but not pulled would fail at run time — say so here instead.
+function ProfilePicker({ profiles, value, onChange }: {
+  profiles: VisionProfile[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-md border border-surface0 bg-base px-2 py-2 text-sm text-text"
+      title="which model to run"
+    >
+      {(profiles.length ? profiles : [{ name: value, installed: true, model: "", kind: "", notes: "" }]).map((p) => (
+        <option key={p.name} value={p.name} disabled={!p.installed}>
+          {p.name}{p.installed ? "" : " (not installed)"}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function ComparePage() {
   const [reels, setReels] = useState<ReelSummary[]>([]);
   const [reelId, setReelId] = useState("");
@@ -105,10 +128,13 @@ export default function ComparePage() {
   const [board, setBoard] = useState<Scoreboard | null>(null);
   const [batch, setBatch] = useState<BatchStatus | null>(null);
   const [n, setN] = useState(10);
+  const [profiles, setProfiles] = useState<VisionProfile[]>([]);
+  const [pair, setPair] = useState<[string, string]>(["claude-cli", "local"]);
 
   const loadBoard = () => api.scoreboard().then(setBoard).catch(() => {});
   useEffect(() => {
     api.reels().then((r) => { setReels(r); if (r.length) setReelId(r[0].id); }).catch(() => {});
+    api.profiles().then(setProfiles).catch(() => setProfiles([]));
     loadBoard();
     const id = setInterval(() => {
       api.compareStatus().then((s) => {
@@ -123,7 +149,7 @@ export default function ComparePage() {
     if (!reelId) return;
     setBusy(true); setErr(""); setResult(null);
     try {
-      setResult(await api.compare(reelId));
+      setResult(await api.compare(reelId, pair));
       loadBoard();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "compare failed");
@@ -132,7 +158,7 @@ export default function ComparePage() {
 
   const runBatch = async () => {
     setErr("");
-    try { setBatch(await api.compareBatch(n)); }
+    try { setBatch(await api.compareBatch(n, pair)); }
     catch (e) { setErr(e instanceof Error ? e.message : "batch failed"); }
   };
 
@@ -162,7 +188,18 @@ export default function ComparePage() {
               <option key={r.id} value={r.id}>{r.title?.slice(0, 70) || r.id}</option>
             ))}
           </select>
-          <Button onClick={runOne} disabled={busy || !reelId}>
+          <ProfilePicker
+            profiles={profiles}
+            value={pair[0]}
+            onChange={(v) => setPair([v, pair[1]])}
+          />
+          <span className="text-xs text-overlay0">vs</span>
+          <ProfilePicker
+            profiles={profiles}
+            value={pair[1]}
+            onChange={(v) => setPair([pair[0], v])}
+          />
+          <Button onClick={runOne} disabled={busy || !reelId || pair[0] === pair[1]}>
             <Play size={14} /> {busy ? "Running both…" : "Compare this reel"}
           </Button>
           <span className="text-xs text-overlay0">~35s — Claude is the slow half</span>

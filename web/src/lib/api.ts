@@ -175,6 +175,16 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
 
 export type SyncBackend = "claude-cli" | "api" | "local";
 
+/** A named model the bench or the Compare tab can run. `installed` is false for
+ *  a model that is in models.yaml but has not been pulled yet. */
+export interface VisionProfile {
+  name: string;
+  kind: string;
+  model: string;
+  installed: boolean;
+  notes: string;
+}
+
 export interface SyncSourceState {
   name: string;
   last_run: string | null;
@@ -292,10 +302,12 @@ export const api = {
   toggleSource: (name: string) => post<Source>(`/api/sources/${encodeURIComponent(name)}/toggle`),
   sync: (backend: SyncBackend, only?: string[]) => post<SyncStatus>("/api/sync", { backend, only }),
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
-  compare: (id: string, backends: SyncBackend[] = ["claude-cli", "local"]) =>
+  profiles: () => get<VisionProfile[]>("/api/profiles"),
+  // profile names, not the three fixed backends — any installed model can be an arm
+  compare: (id: string, backends: string[] = ["claude-cli", "local"]) =>
     post<CompareResult>(`/api/reels/${id}/compare`, { backends }),
   scoreboard: () => get<Scoreboard>("/api/compare/scoreboard"),
-  compareBatch: (n: number, backends: SyncBackend[] = ["claude-cli", "local"]) =>
+  compareBatch: (n: number, backends: string[] = ["claude-cli", "local"]) =>
     post<BatchStatus>("/api/compare/batch", { n, backends, only_missing: true }),
   compareStatus: () => get<BatchStatus>("/api/compare/status"),
   compareCancel: () => post<BatchStatus>("/api/compare/cancel"),

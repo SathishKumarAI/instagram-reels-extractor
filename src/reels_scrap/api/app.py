@@ -602,12 +602,11 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             raise HTTPException(400, "backend must be claude-cli | api | local")
 
         def _job():
-            from ..config import Config as _C
+            from ..compare import cfg_for_backend
             from ..sources import poll_all
-            c = _C.load(config_path)
+            c = cfg_for_backend(backend, config_path)
             c.extract.transcript = c.extract.ocr = False   # claude-only style (fast)
             c.extract.vision = True
-            c.extract.vision_backend = backend
             try:
                 results = poll_all(c, config_path, browser=body.browser or "chrome",
                                    only=body.only or None)
@@ -621,9 +620,16 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
                 _SYNC.update(running=False, error=str(ex)[:300])
 
         if backend == "local":
-            c0 = Config.load(config_path)
-            if not c0.extract.vision_local.base_url:
-                raise HTTPException(400, "backend=local needs extract.vision_local.base_url in config")
+            # the endpoint lives in config-local.yaml, not config.yaml — cfg_for_backend
+            # is the one place that knows that, and the Compare tab already used it
+            from ..compare import cfg_for_backend
+
+            if not cfg_for_backend("local", config_path).extract.vision_local.base_url:
+                raise HTTPException(
+                    400,
+                    "backend=local needs extract.vision_local.base_url — set it in "
+                    "config-local.yaml (see docs/LOCAL-VISION.md)",
+                )
 
         _SYNC.update(running=True, backend=backend, ingested=0, sources=0, error="")
         threading.Thread(target=_job, daemon=True).start()
@@ -645,6 +651,34 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             return compare_reel(_safe_id(reel_id), backends, base_config=config_path)
         except FileNotFoundError as e:
             raise HTTPException(404, str(e)) from e
+
+    @app.get("/api/profiles")
+    def list_vision_profiles() -> list[dict]:
+        """Model profiles this machine can run — the Compare tab's picker.
+
+        Merges the declared/implicit profiles with the model registry, so a model
+        that is in the plan but not pulled yet shows as not installed rather than
+        silently failing at run time.
+        """
+        from ..modelreg import status
+        from ..profiles import list_profiles
+
+        reg = {r["name"]: r for r in status()}
+        out = []
+        for name in list_profiles(config_path):
+            r = reg.get(name, {})
+            declared = cfg.extract.vision_profiles.get(name)
+            kind = declared.kind if declared else ("local" if name == "local" else name)
+            model = (declared.model if declared else "") or r.get("tag", "")
+            out.append({
+                "name": name,
+                "kind": kind,
+                "model": model,
+                # cloud arms need no download; local ones must be pulled first
+                "installed": True if kind != "local" else bool(r.get("installed", name == "local")),
+                "notes": (declared.notes if declared else "") or r.get("role", ""),
+            })
+        return out
 
     @app.get("/api/compare/scoreboard")
     def compare_scoreboard() -> dict:

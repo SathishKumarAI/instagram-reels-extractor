@@ -52,6 +52,30 @@ class VisionLocalCfg(BaseModel):
     max_tokens: int = Field(default=900, ge=64, le=4096)
 
 
+class VisionProfileCfg(BaseModel):
+    """One named model the bench (or a sync) can run.
+
+    A profile is what `vision_backend` could not be: several local models coexist,
+    each with its own endpoint and context, and each writes its own named variant
+    on a reel instead of overwriting the last one.
+    """
+
+    kind: str = "local"          # local | claude-cli | api
+    model: str = ""              # ollama tag or claude model id
+    base_url: str = ""           # local only; empty -> inherit extract.vision_local
+    api_key: str = ""
+    num_ctx: int = Field(default=32768, ge=2048)   # frames+prompt overflow small contexts
+    max_tokens: int = Field(default=1500, ge=64, le=8192)
+    timeout: float = Field(default=300.0, ge=5)
+    notes: str = ""              # why this model is in the set — the research value
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.kind not in {"local", "claude-cli", "api"}:
+            raise ValueError("vision_profiles.*.kind must be 'local', 'claude-cli' or 'api'")
+        return self
+
+
 class ExtractCfg(BaseModel):
     caption: bool = True
     transcript: bool = True
@@ -73,6 +97,9 @@ class ExtractCfg(BaseModel):
     # auto (api if ANTHROPIC_API_KEY else claude-cli) | claude-cli | api | local
     vision_backend: str = "auto"
     vision_local: VisionLocalCfg = Field(default_factory=VisionLocalCfg)
+    # Named models the bench can run, e.g. {"qwen3vl-8b": {kind: local, model: …}}.
+    # Empty is fine: `claude-cli`, `api` and `local` resolve without being declared.
+    vision_profiles: dict[str, VisionProfileCfg] = Field(default_factory=dict)
     # When a "local" vision call fails (endpoint down / malformed JSON after retries),
     # fall back to claude-cli so every reel still gets extracted. NOTE: fallback frames
     # DO leave the machine (egress to Claude). Set false for strict local-only.
