@@ -10,17 +10,17 @@ source:
 auth:                   # PRIVATE reel access (your account / accounts you follow)
   cookies_from_browser: "chrome"   # firefox | chrome | brave | edge — must be logged into IG
   cookies_file: ""           # OR path to exported cookies.txt
-  browser_profile: ""        # optional named browser profile
+  browser_profile: "Default"        # optional named browser profile
 
 extract:
   caption: true         # caption + hashtags + mentions + stats (free, from metadata)
-  # CLAUDE-CODE-ONLY default: local ML stages off. Code for whisper/easyocr is
-  # NOT removed — flip these back to true to re-enable local transcript/OCR.
-  transcript: false     # OFF — was faster-whisper (local CPU). Set true to re-enable.
+  # Transcript is ON as of 2026-08-04: 89.5% of the corpus had no spoken text
+  # captured at all, which was the single biggest cause of vague summaries.
+  transcript: true      # GPU whisper large-v3, ~12x realtime batched
   ocr: false            # OFF — was easyocr+torch (local CPU). Set true to re-enable.
   vision: true          # AI visual summary via claude — reads on-screen text too
   vision_backend: claude-cli  # claude code only (no API key, no local ML). auto|claude-cli|api
-  whisper_model: base   # tiny | base | small | medium | large-v3
+  whisper_model: large-v3   # tiny | base | small | medium | large-v3
   whisper_device: auto  # auto | cpu | cuda
   whisper_language: ""  # "" = auto-detect source language; set "en" to force a language
   whisper_translate: true  # translate non-English speech to clean English (auto-detect source)

@@ -15,10 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from reels_scrap.config import Config  # noqa: E402
-from reels_scrap.extract.transcript import add_transcript  # noqa: E402
-from reels_scrap.docs import rebuild_all  # noqa: E402
-from reels_scrap.models import Reel  # noqa: E402
+from reels_scrap.config import Config
+from reels_scrap.docs import rebuild_all
+from reels_scrap.extract.transcript import add_transcript
+from reels_scrap.models import Reel
 
 
 def main() -> None:

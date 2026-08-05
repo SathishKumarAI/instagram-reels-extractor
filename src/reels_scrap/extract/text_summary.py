@@ -127,8 +127,10 @@ def add_text_summary(reel: Reel, cfg: Config) -> Reel:
         last = None
         for attempt in range(1, e.vision_max_retries + 1):
             try:
-                data, tokens = _run("local"); used = "local"; break
-            except Exception as ex:  # noqa: BLE001
+                data, tokens = _run("local")
+                used = "local"
+                break
+            except Exception as ex:
                 last = ex
                 log.warning("%s: local text attempt %d failed: %s", reel.id, attempt, ex)
                 if attempt < e.vision_max_retries:
@@ -136,7 +138,8 @@ def add_text_summary(reel: Reel, cfg: Config) -> Reel:
         else:
             if not e.vision_local_fallback:
                 raise RuntimeError(f"local text failed, fallback disabled: {last}")
-            data, tokens = _run("claude-cli"); used = "local->claude-cli"
+            data, tokens = _run("claude-cli")
+            used = "local->claude-cli"
     else:
         data, tokens = _run(backend)
 

@@ -18,7 +18,7 @@ def ffmpeg_bin() -> str:
         import imageio_ffmpeg
 
         return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise RuntimeError(
             "ffmpeg not found. Install via `pip install imageio-ffmpeg` or `./setup.sh`."
         ) from e

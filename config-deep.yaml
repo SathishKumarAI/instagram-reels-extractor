@@ -13,7 +13,7 @@ source:
 auth:
   cookies_from_browser: "chrome"
   cookies_file: ""
-  browser_profile: ""
+  browser_profile: "Default"
 
 extract:
   caption: true

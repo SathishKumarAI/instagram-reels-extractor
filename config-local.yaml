@@ -18,29 +18,34 @@ source:
 auth:
   cookies_from_browser: "chrome"
   cookies_file: "cookies.txt"
-  browser_profile: ""
+  browser_profile: "Default"
 
 extract:
   caption: true
-  transcript: false
+  transcript: true
   ocr: false
   vision: true
   vision_backend: local          # <-- the switch: use the local GPU endpoint
   vision_local:
-    base_url: "http://gpu-box:8000/v1"   # <-- EDIT to your box (vLLM/Ollama /v1)
-    model: "moonshotai/Kimi-VL-A3B-Instruct"
+    # this machine: Ollama on the RTX 5070 Ti. Point at a remote box instead by
+    # swapping the host (e.g. http://gpu-box:8000/v1 for vLLM).
+    base_url: "http://127.0.0.1:11434/v1"
+    # qwen2.5vl:7b with num_ctx raised to 16k — see scripts/ollama-vision.Modelfile
+    # (stock 4096 ctx rejects 4 frames + prompt)
+    model: "reels-vision"
     api_key: ""
-    timeout: 120
+    timeout: 240        # 6 frames at 720px on a 7B q8 — slower than the 4x512 default
+    max_tokens: 1500    # room for the full 3-8 facts the schema asks for
   vision_local_fallback: false   # STRICT LOCAL — never egress to Claude. Failed reels dead-letter; retry with `sync --retry-failed`
-  whisper_model: base
+  whisper_model: large-v3
   whisper_device: auto
   whisper_language: ""
   whisper_translate: true
   vision_model: claude-sonnet-4-6   # used only for the fallback path
   frame_every_sec: 2
-  max_frames: 4
-  frame_max_width: 512
-  vision_concurrency: 1          # raise for a GPU box that handles parallel requests
+  max_frames: 6          # parity with config.yaml (the Claude path)
+  frame_max_width: 720   # parity — and matches the frames already cached on disk
+  vision_concurrency: 3          # 16GB VRAM, single user — keep the GPU busy between reels
   vision_max_retries: 3
   vision_retry_backoff: 5.0
 

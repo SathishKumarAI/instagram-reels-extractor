@@ -24,7 +24,7 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
             from .transcript import add_transcript
 
             add_transcript(reel, cfg)
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             log.error("transcript failed %s: %s", reel.id, ex)
             errors["transcript"] = str(ex)
 
@@ -33,7 +33,7 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
             from .ocr import add_ocr
 
             add_ocr(reel, cfg)
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             log.error("ocr failed %s: %s", reel.id, ex)
             errors["ocr"] = str(ex)
 
@@ -48,7 +48,7 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
                 with_retry(lambda: add_text_summary(reel, cfg),
                            attempts=e.vision_max_retries, backoff=e.vision_retry_backoff,
                            label=f"text {reel.id}")
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             log.error("text-structure failed %s: %s", reel.id, ex)
             errors["text"] = str(ex)
     elif e.vision:
@@ -66,7 +66,7 @@ def extract_all(reel: Reel, cfg: Config) -> dict[str, str]:
                     backoff=e.vision_retry_backoff,
                     label=f"vision {reel.id}",
                 )
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             log.error("vision failed %s: %s", reel.id, ex)
             errors["vision"] = str(ex)
 

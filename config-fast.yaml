@@ -12,7 +12,7 @@ source:
 auth:
   cookies_from_browser: "chrome"   # decrypts sessionid via secretstorage
   cookies_file: ""
-  browser_profile: ""
+  browser_profile: "Default"
 
 extract:
   caption: true         # free, from metadata

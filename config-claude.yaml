@@ -13,7 +13,7 @@ source:
 auth:
   cookies_from_browser: "chrome"   # used for collection listing (works with Chrome open)
   cookies_file: "cookies.txt"      # used for per-reel download (avoids Chrome DB lock)
-  browser_profile: ""
+  browser_profile: "Default"
 
 extract:
   caption: true

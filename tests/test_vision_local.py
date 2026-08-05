@@ -74,7 +74,7 @@ def test_local_falls_back_to_claude_on_bad_json(tmp_path, monkeypatch):
     monkeypatch.setattr(vision, "_via_cli",
                         lambda r, c, it: (VALID, {"input": 9, "output": 9, "cost_usd": 0.02}))
 
-    data, tokens, used = vision._run_local(Reel(id="X", url="https://instagram.com/reel/X/"), cfg, _items(tmp_path))
+    data, _tokens, used = vision._run_local(Reel(id="X", url="https://instagram.com/reel/X/"), cfg, _items(tmp_path))
     assert used == "local->claude-cli"
     assert data["genre"] == "tutorial"
 
@@ -90,6 +90,7 @@ def test_local_no_fallback_raises(tmp_path, monkeypatch):
 
 def test_add_summary_records_provenance_and_roundtrips(tmp_path, monkeypatch):
     cfg = _cfg()
+    cfg.extract.vision_local_two_pass = False   # this test stubs the single-pass call
     monkeypatch.setattr(vision, "_frames_with_time", lambda r, c: _items(tmp_path))
     monkeypatch.setattr(vision, "_via_local",
                         lambda r, c, it: (VALID, {"input": 100, "output": 30, "cost_usd": 0.0}))
@@ -109,3 +110,36 @@ def test_add_summary_records_provenance_and_roundtrips(tmp_path, monkeypatch):
 def test_config_rejects_local_without_base_url():
     with pytest.raises(Exception):
         ExtractCfg(vision_backend="local", vision_local=VisionLocalCfg(base_url=""))
+
+
+def test_two_pass_reads_then_structures(tmp_path, monkeypatch):
+    """Pass 1 transcribes the frames; pass 2 turns that text into the schema.
+
+    Pass 2 never sees the images — that is the whole point, it cannot invent what
+    was not read. Opt-in: measured worse on summaries and structured fields, so the
+    default is single-pass (see ExtractCfg.vision_local_two_pass).
+    """
+    cfg = _cfg()
+    cfg.extract.vision_local_two_pass = True
+    monkeypatch.setattr(vision, "_frames_with_time", lambda r, c: _items(tmp_path))
+
+    seen = {}
+    import requests
+    monkeypatch.setattr(requests, "post",
+                        lambda *a, **k: _Resp(_openai_payload("Frame 0 (0s): PYTEST 101 | a slide")))
+
+    def fake_text_local(prompt, c):
+        seen["prompt"] = prompt
+        return VALID, {"input": 10, "output": 5}
+
+    import reels_scrap.extract.text_summary as ts
+    monkeypatch.setattr(ts, "_via_local", fake_text_local)
+
+    reel = Reel(id="X", url="https://instagram.com/reel/X/")
+    vision.add_summary(reel, cfg)
+
+    assert "PYTEST 101" in seen["prompt"]          # pass 1's reading reached pass 2
+    assert "data:image" not in seen["prompt"]      # …and no image did
+    assert reel.genre == "tutorial"
+    assert reel.tokens["backend"] == "local"
+    assert reel.tokens["passes"] == 2

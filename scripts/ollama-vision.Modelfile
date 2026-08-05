@@ -1,0 +1,11 @@
+# Local vision model for `sync --backend local`.
+#   ollama create reels-vision -f scripts/ollama-vision.Modelfile
+#
+# Stock qwen2.5vl:7b defaults to a 4096-token context; 4 downscaled frames plus
+# the prompt is ~5.2k, so every call 400s with exceed_context_size_error.
+# q8_0 over the default Q4_K_M: 9.4GB vs 6GB, and the RTX 5070 Ti has 16GB —
+# less quantization damage on the thing that matters here, reading on-screen text.
+# 32k ctx fits 6 frames at 720px (~2.6k tokens each) with room for the prompt.
+FROM qwen2.5vl:7b-q8_0
+PARAMETER num_ctx 32768
+PARAMETER temperature 0

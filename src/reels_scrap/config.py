@@ -66,6 +66,9 @@ class ExtractCfg(BaseModel):
     # For English audio it's a near-identity transcription. Set false to keep the
     # raw source-language transcript verbatim.
     whisper_translate: bool = True
+    # GPU batching: 12.6x realtime vs 1.6x sequential (RTX 5070 Ti, large-v3).
+    # Ignored on CPU, where the plain model is used.
+    whisper_batch_size: int = Field(default=8, ge=1, le=32)
     vision_model: str = "claude-sonnet-4-6"
     # auto (api if ANTHROPIC_API_KEY else claude-cli) | claude-cli | api | local
     vision_backend: str = "auto"
@@ -74,6 +77,15 @@ class ExtractCfg(BaseModel):
     # fall back to claude-cli so every reel still gets extracted. NOTE: fallback frames
     # DO leave the machine (egress to Claude). Set false for strict local-only.
     vision_local_fallback: bool = True
+    # Two-pass local extraction: pass 1 the VLM transcribes what is on screen,
+    # pass 2 a text-only call turns those readings into the JSON schema.
+    #
+    # MEASURED over 15 reels (2026-08-04), same frames, both local:
+    #   1-pass  facts 5.53  tags 5.20  summary 217 chars  fields 1.87  5.74s
+    #   2-pass  facts 6.47  tags 5.07  summary 187 chars  fields 1.27  7.13s
+    # More facts, but shorter summaries, fewer structured fields and 24% slower.
+    # Off by default; turn on when facts-per-reel is what you are optimising.
+    vision_local_two_pass: bool = False
     frame_every_sec: int = Field(default=2, ge=1, le=30)
     # Frames sent to vision. Fewer = faster + cheaper (esp. via claude-cli, where each
     # frame is an agentic Read turn). 6 is a good quality/cost balance; 4 for speed.
@@ -159,8 +171,8 @@ class Config(BaseModel):
     paths: PathsCfg = PathsCfg()
 
     @classmethod
-    def load(cls, path: str | Path) -> "Config":
-        raw = yaml.safe_load(Path(path).read_text()) or {}
+    def load(cls, path: str | Path) -> Config:
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         return cls.model_validate(raw)
 
     @property

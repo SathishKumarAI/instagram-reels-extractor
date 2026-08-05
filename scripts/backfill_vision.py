@@ -6,7 +6,7 @@ that has a video but is missing `tags` (or `tokens`), then rebuilds docs + index
 Idempotent — skips reels already carrying tags. Run with the CONDA env (needs
 ffmpeg for frame sampling); vision uses claude-cli (no API key).
 
-    ~/miniforge3/envs/reels-scrap/bin/python scripts/backfill_vision.py [--all] [--slug phd-opportunities]
+    ~/miniforge3/envs/reels-scrap/bin/python scripts/backfill_vision.py [--all] [--slug topic-research]
 
 --all      re-vision every reel (not just those missing tags)
 --slug X   limit to one collection's manifest membership
@@ -20,9 +20,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from reels_scrap.config import Config          # noqa: E402
-from reels_scrap.extract.vision import add_summary  # noqa: E402
-from reels_scrap.models import Reel             # noqa: E402
+from reels_scrap.config import Config
+from reels_scrap.extract.vision import add_summary
+from reels_scrap.models import Reel
 
 
 def main() -> int:
@@ -99,7 +99,7 @@ def main() -> int:
                 spent += float(r.tokens.get("cost_usd", 0.0))
                 print(f"  [{n}/{len(todo)}] {r.id}: {len(r.tags)} tags, "
                       f"cost ${r.tokens.get('cost_usd', 0):.3f}, cumulative ${spent:.2f}")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 failed += 1
                 print(f"  [{n}/{len(todo)}] {r.id}: FAILED {e}")
             if args.max_cost and spent >= args.max_cost and not stopped:
@@ -118,7 +118,7 @@ def main() -> int:
         from reels_scrap.search import build_index
 
         build_index(cfg)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"index rebuild skipped: {e}")
     print("rebuilt docs + index")
     return 0
