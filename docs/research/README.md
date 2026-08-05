@@ -11,6 +11,9 @@ build step, and the measured results.
 | `../superpowers/specs/2026-08-05-vision-model-bench-design.md` | the design that was approved before any code |
 | `PLAN.md` | phases, status, what each phase must prove |
 | `prompts/` | one file per build step: the prompt written **before** the code |
+| `MODELS.md` | every model: architecture, role in the experiment, links, and the knobs that change its answer |
+| `UI-TABS.md` | every tab: what it is for, what it reads, the gotcha |
+| `COSTS.md` | what each cost number means and where it is produced |
 | `BENCH-<date>.md` | measured results + the written why-they-differ analysis |
 | `../WORKFLOW-RESEARCH.md` | earlier diagnosis: transcript/OCR coverage gaps |
 
