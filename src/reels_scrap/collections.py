@@ -87,3 +87,17 @@ def list_manifests(output_dir: Path) -> list[Manifest]:
         except (json.JSONDecodeError, TypeError):
             continue
     return out
+
+
+def reels_by_collection(output_dir: Path) -> dict[str, list[str]]:
+    """`reel_id -> [collection slug, …]`, inverted from the manifests.
+
+    A reel's collections are never stored on its record — the manifest is the
+    only place membership lives, so re-filing a reel needs no record rewrite.
+    Slugs come back sorted so the UI order does not depend on file order.
+    """
+    by_reel: dict[str, list[str]] = {}
+    for m in list_manifests(output_dir):
+        for rid in m.reel_ids:
+            by_reel.setdefault(rid, []).append(m.slug)
+    return {rid: sorted(set(slugs)) for rid, slugs in by_reel.items()}

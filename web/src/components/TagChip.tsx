@@ -47,6 +47,36 @@ export function CollectionDot({ name, className = "" }: { name: string; classNam
   return <span className={`inline-block h-2 w-2 rounded-full ${BG[accentFor(name)]} ${className}`} />;
 }
 
+/**
+ * The saved-collection a reel came from — the shelf you actually think in.
+ * Same colour hash as the tag chips, so `ai` is one accent across every screen.
+ */
+export function CollectionChip({
+  name,
+  onClick,
+  size = "sm",
+}: {
+  name: string;
+  onClick?: () => void;
+  size?: "sm" | "md";
+}) {
+  const accent = accentFor(name);
+  const pad = size === "md" ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs";
+  return (
+    <button
+      onClick={onClick}
+      disabled={!onClick}
+      title={onClick ? `Show everything in ${name}` : name}
+      className={`inline-flex items-center gap-1.5 rounded-md ring-1 ${RING[accent]}
+        bg-surface0/60 ${pad} ${TEXT[accent]} transition-colors hover:bg-surface0
+        disabled:cursor-default`}
+    >
+      <CollectionDot name={name} className="shrink-0" />
+      <span className="font-medium">{name}</span>
+    </button>
+  );
+}
+
 export function TagChip({
   tag,
   count,

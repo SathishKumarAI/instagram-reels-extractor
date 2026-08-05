@@ -216,12 +216,12 @@ the conversation.
 
 | # | Feature | P | E | V | Notes |
 |---|---|---|---|---|---|
-| M1 | Show which model produced a record, everywhere it is read | P1 | S | ★★★ | badge on reel card/reader: `local · reels-vision` vs `claude · sonnet-4-6`. Provenance already lives in `tokens.backend`/`tokens.model` — it is simply never rendered |
+| M1 | ~~Show which model produced a record, everywhere it is read~~ **DONE 2026-08-05** | P1 | S | ★★★ | `ModelBadge` on card, drawer, reader and table; `ReelSummary.model` added. Corpus reads 644 Claude / 25 local / 5 unknown |
 | M2 | Per-reel model diff, inline (not only the Compare tab) | P1 | M | ★★★ | when a reel has 2+ `variants`, offer a toggle on the reader: read the local version vs the cloud one, with changed claims highlighted |
 | M3 | "Which model wrote this?" filter | P2 | S | ★★ | filter the library by backend — find every record produced locally before the quality fixes landed |
-| M4 | Collection tags on every reel (`front-end`, `topic-books`, `ai`) | P1 | M | ★★★ | today a reel shows only *topic* tags (`ai-tools`) and genre (`educational`). The saved-collection it came from is the tag you actually think in. Data exists (manifests → `ReelSummary.collections`); needs chips wherever tags render, using the same colour hash as G1 |
-| M5 | Filter/browse by collection tag | P1 | S | ★★★ | → M4; click `topic-books` anywhere, see that shelf |
-| M6 | Multi-collection reels rendered honestly | P2 | S | ★★ | a reel saved to 3 collections shows 3 chips, not a truncated one |
+| M4 | ~~Collection tags on every reel (`front-end`, `topic-books`, `ai`)~~ **DONE 2026-08-05** | P1 | M | ★★★ | `CollectionChip` (same FNV-1a accent as G1) on card, drawer, reader, table. `reels_by_collection()` inverts the manifests; the reel **detail** endpoint carries `collections` now — it never did, so the reader's chips rendered nothing |
+| M5 | ~~Filter/browse by collection tag~~ **DONE 2026-08-05** | P1 | S | ★★★ | chip click filters the grid; `/reels?collection=<slug>` is the deep link from reader and table |
+| M6 | ~~Multi-collection reels rendered honestly~~ **DONE 2026-08-05** | P2 | S | ★★ | every chip renders, no truncation — 175 of 674 reels sit on 2+ shelves, 2 on three |
 | M7 | Collection tag on search results and chat citations | P2 | S | ★★ | answers should say which shelf a citation came from |
 | M8 | Manual tags — your own words, per reel | P2 | M | ★★ | model tags are generated; a hand tag is a promise. Keep them visually distinct |
 | M9 | Tag/collection rename that updates every surface | P2 | M | ★★ | rename exists for tags; collections are renamed by editing `sources.json` by hand |

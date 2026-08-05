@@ -28,6 +28,7 @@ class ReelSummary(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0
     backend: str = ""      # vision provenance: claude-cli | api | local | local->claude-cli
+    model: str = ""        # the model behind that backend: claude-sonnet-4-6 | reels-vision
     starred: bool = False
     read: bool = False
     archived: bool = False

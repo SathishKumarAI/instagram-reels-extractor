@@ -4,6 +4,8 @@ import { api, type ReelSummary } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CollectionChip } from "@/components/TagChip";
+import { ModelBadge } from "@/components/ModelBadge";
 import { fmtNum } from "@/lib/utils";
 import { Archive, ArrowDown, ArrowUp, Copy, Download, ExternalLink, Star } from "lucide-react";
 
@@ -12,6 +14,8 @@ const COLS: { key: Key; label: string; num?: boolean }[] = [
   { key: "title", label: "Title" },
   { key: "author", label: "Author" },
   { key: "genre", label: "Category" },
+  { key: "collections", label: "Collections" },
+  { key: "backend", label: "Model" },
   { key: "tags", label: "Tags" },
   { key: "likes", label: "Likes", num: true },
   { key: "comments", label: "Comments", num: true },
@@ -168,6 +172,14 @@ export default function TablePage() {
                 </td>
                 <td className="whitespace-nowrap p-2 text-subtext">{r.author}</td>
                 <td className="p-2">{r.genre && <Badge variant="genre">{r.genre}</Badge>}</td>
+                <td className="max-w-[14rem] p-2">
+                  <div className="flex flex-wrap gap-1">
+                    {(r.collections ?? []).map((c) => (
+                      <CollectionChip key={c} name={c} onClick={() => navigate(`/reels?collection=${encodeURIComponent(c)}`)} />
+                    ))}
+                  </div>
+                </td>
+                <td className="p-2"><ModelBadge backend={r.backend} model={r.model} size="xs" /></td>
                 <td className="max-w-[16rem] p-2">
                   <div className="flex flex-wrap gap-1">
                     {r.tags.slice(0, 3).map((t) => (

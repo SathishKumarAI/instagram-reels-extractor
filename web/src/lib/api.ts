@@ -17,7 +17,8 @@ export interface ReelSummary {
   has_pdf: boolean;
   tokens_in: number;
   tokens_out: number;
-  backend: string;
+  backend: string;   // claude-cli | api | local | local->claude-cli
+  model: string;     // claude-sonnet-4-6 | reels-vision
   starred: boolean;
   read: boolean;
   archived: boolean;
@@ -63,7 +64,7 @@ export interface ReelDetail extends ReelSummary {
   ocr_text: string[];
   video_path: string | null;
   pdf_path: string | null;
-  tokens: { input?: number; output?: number };
+  tokens: { input?: number; output?: number; backend?: string; model?: string };
   annotation: { note?: string; starred?: boolean; read?: boolean; archived?: boolean };
 }
 

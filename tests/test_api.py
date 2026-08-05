@@ -21,6 +21,28 @@ def test_health_and_reels(cfg, tmp_path):
     assert client.get("/api/reels/NOPE").status_code == 404
 
 
+def test_provenance_and_collections(cfg, tmp_path):
+    """M1/M4: the UI must be able to say who wrote a record and which shelf it is on."""
+    from reels_scrap.collections import Manifest, save_manifest
+    from reels_scrap.models import Reel
+
+    r = Reel.load(tmp_path / "data" / "AAA.json")
+    r.tokens = {"input": 10, "output": 5, "backend": "local", "model": "reels-vision"}
+    r.save(tmp_path / "data")
+    save_manifest(tmp_path / "output", Manifest(slug="ai", title="Ai", reel_ids=["AAA"]))
+    save_manifest(tmp_path / "output", Manifest(slug="books", title="Books", reel_ids=["AAA"]))
+
+    client = TestClient(appmod.create_app(str(tmp_path / "config.yaml")))
+    summary = {x["id"]: x for x in client.get("/api/reels").json()}
+    assert (summary["AAA"]["backend"], summary["AAA"]["model"]) == ("local", "reels-vision")
+    assert summary["AAA"]["collections"] == ["ai", "books"]
+    assert summary["BBB"]["model"] == ""       # no provenance stored -> no badge
+
+    detail = client.get("/api/reels/AAA").json()
+    assert detail["collections"] == ["ai", "books"]
+    assert detail["tokens"]["model"] == "reels-vision"
+
+
 def test_knowledge_endpoint(cfg, tmp_path):
     client = TestClient(appmod.create_app(str(tmp_path / "config.yaml")))
     kb = client.get("/api/knowledge").json()

@@ -151,6 +151,7 @@ def _summary(r: Reel) -> ReelSummary:
         comments=r.comments, duration=r.duration, timestamp=r.timestamp, has_pdf=bool(r.pdf_path),
         tokens_in=r.tokens.get("input", 0), tokens_out=r.tokens.get("output", 0),
         backend=str(r.tokens.get("backend", "") or ""),
+        model=str(r.tokens.get("model", "") or ""),
     )
 
 
@@ -231,15 +232,11 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
 
     @app.get("/api/reels", response_model=list[ReelSummary])
     def list_reels() -> list[ReelSummary]:
-        from ..collections import list_manifests
+        from ..collections import reels_by_collection
         from ..userstate import load_annotations
 
         ann = load_annotations(cfg.output_dir)
-        # reel_id -> [collection slug, …] from the saved-collection manifests
-        by_reel: dict[str, list[str]] = {}
-        for m in list_manifests(cfg.output_dir):
-            for rid in m.reel_ids:
-                by_reel.setdefault(rid, []).append(m.slug)
+        by_reel = reels_by_collection(cfg.output_dir)
         out = []
         for r in _reels(cfg):
             s = _summary(r)
@@ -301,12 +298,9 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         A tag alone says what a reel is about; the collection says which shelf of
         yours it belongs on. The UI colours chips by collection, so it needs both.
         """
-        from ..collections import list_manifests
+        from ..collections import reels_by_collection
 
-        by_reel: dict[str, list[str]] = {}
-        for m in list_manifests(cfg.output_dir):
-            for rid in m.reel_ids:
-                by_reel.setdefault(rid, []).append(m.slug)
+        by_reel = reels_by_collection(cfg.output_dir)
 
         tags: dict[str, dict] = {}
         for r in _reels(cfg):
@@ -507,9 +501,13 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         p = cfg.data_dir / f"{_safe_id(reel_id)}.json"
         if not p.exists():
             raise HTTPException(404, f"no reel {reel_id}")
+        from ..collections import reels_by_collection
         from ..userstate import load_annotations
 
         d = Reel.load(p).model_dump(mode="json")
+        # membership lives in the manifests, not on the record — the reader shows
+        # the shelf a reel came from, so the detail response needs it too
+        d["collections"] = reels_by_collection(cfg.output_dir).get(reel_id, [])
         d["annotation"] = load_annotations(cfg.output_dir).get(reel_id, {})
         return d
 

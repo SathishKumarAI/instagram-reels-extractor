@@ -2,7 +2,7 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-04 (now on the **Windows** box, not the Rocky Linux one)
+- **Last touched:** 2026-08-05 (on the **Windows** box, not the Rocky Linux one)
 - **Where I stopped:** Full sync ran green — **45 new reels**, corpus now **665**
   (664 with summaries; the 1 gap is an image carousel, no video). Web UI + API
   running locally: API `127.0.0.1:8000`, Vite dev `localhost:5173`.
@@ -115,15 +115,36 @@ Update this when you STOP working, not when you start.
   variant or backfilling `author_handle` rewrites a reel's json without changing
   its indexed text — on an mtime key that forced a full 665-reel re-embed. One
   4m14s rebuild installs the hashes; every run after is **1.0s**.
-- **Where it stands:** 68 tests pass, ruff clean (78 findings → 0), `tsc -b` clean,
-  API + UI up. 13 tabs. Corpus 674 reels.
+- **Both backfills finished (2026-08-05):** local variants **635 ok / 6 failed**
+  in 90.8 min (641 of 674 reels now carry a `variants.local`), and GPU transcripts
+  (C6) across the corpus — **454 transcribed, 123 silent, 0 failed** in 19.6 min at
+  6.5× realtime. 527 reels have transcript text.
+- **Epic M P1 slice DONE 2026-08-05 (M1, M4, M5, M6):**
+  - `reels_by_collection()` in `collections.py` — one manifest inverter, replacing
+    the loop that was copy-pasted into `/api/reels` and `/api/tags`.
+  - `GET /api/reels/{id}` now returns `collections`. It never did, so the reader's
+    collection chips had been rendering an empty list all along.
+  - `ReelSummary.model` added (`tokens.model` was stored, never exposed).
+  - `web/src/components/ModelBadge.tsx` — provenance badge on card, drawer, reader
+    and a new table column; `backendChip` moved out of `ReelsPage` (the reader was
+    importing it cross-view).
+  - `CollectionChip` in `TagChip.tsx` — same FNV-1a accent as the tags page, so a
+    shelf is one colour everywhere. Click filters the grid;
+    `/reels?collection=<slug>` is the deep link from reader and table.
+  - Measured on the live corpus: **644 Claude / 25 local / 5 unknown**, 19 shelves,
+    **175 reels on 2+ shelves**, 10 on none.
+- **Where it stands:** 77 tests pass, ruff clean, `tsc -b` + `vite build` clean.
+  13 tabs. Corpus 674 reels.
 - **Known gaps, stated plainly:**
   - Author-based discovery is code-complete but Instagram is 429ing the profile
     endpoint after a session of heavy use — needs a cooldown to verify end to end.
     The hashtag path works (27 candidates found).
-  - GPU transcripts (C6) and local RAG chat (L1) not built — see the plan for why.
-  - Local variant backfill still running at ~306/665 when this was written.
-- **Next session:** Epic M in `docs/BACKLOG-120.md` — the owner's parked requests:
-  model-provenance badges everywhere, per-reel local-vs-cloud diff in the reader,
-  and **collection tags on every reel** (`front-end`, `topic-books`, `ai`).
+  - Local RAG chat (L1) not built — see the plan for why.
+  - The Epic M UI was verified by build + live API responses, not by eye: the
+    Chrome extension is not connected on this box.
+- **Next session:** Epic M continued — **M2** (inline local-vs-cloud diff in the
+  reader; 641 reels already have both variants and `compare.diff_facts` is pure,
+  but there is still **no read-only endpoint that diffs stored variants** —
+  `POST /api/reels/{id}/compare` re-runs the models), then M3 (filter by backend)
+  and M7 (collection on search hits — `SearchHit` carries none today).
 - **Blocked on:** nothing. Open questions for the owner in `docs/PLAN-2026-08.md` §5.

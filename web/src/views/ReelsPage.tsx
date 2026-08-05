@@ -5,20 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CollectionChip } from "@/components/TagChip";
+import { ModelBadge } from "@/components/ModelBadge";
 import { fmtNum } from "@/lib/utils";
 import { Archive, Calendar, Check, Coins, Copy, Download, ExternalLink, FileText, Hash, Heart, MessageCircle, Star, X } from "lucide-react";
 
 const fmtTok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
-
-// vision-backend provenance chip: which model extracted this reel
-export const backendChip = (b: string): { label: string; cls: string } | null => {
-  if (!b) return null;
-  if (b.startsWith("local->")) return { label: "Local→Claude", cls: "bg-peach/15 text-peach" };
-  if (b === "local") return { label: "Local", cls: "bg-green/15 text-green" };
-  if (b === "api") return { label: "Claude API", cls: "bg-blue/15 text-blue" };
-  if (b === "claude-cli") return { label: "Claude", cls: "bg-mauve/15 text-mauve" };
-  return { label: b, cls: "bg-surface0 text-subtext" };
-};
 
 type Sort = "newest" | "oldest" | "likes" | "comments" | "tokens" | "duration" | "title";
 const SORTS: { v: Sort; label: string }[] = [
@@ -67,9 +59,12 @@ export default function ReelsPage() {
     api.views().then(setViews).catch(() => setViews([]));
   }, []);
 
+  // inbound deep links: /reels?tag=x, /reels?collection=y (from the reader, tags page)
   useEffect(() => {
     const t = params.get("tag");
     if (t) setTag(t);
+    const c = params.get("collection");
+    if (c) setCollection(c);
   }, [params]);
 
   const setFlag = (id: string, key: "starred" | "read" | "archived", val: boolean) => {
@@ -307,14 +302,7 @@ export default function ReelsPage() {
                   <CardContent>
                     <div className="mb-1 flex items-center gap-2">
                       {r.genre && <Badge variant="genre">{r.genre}</Badge>}
-                      {backendChip(r.backend) && (
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${backendChip(r.backend)!.cls}`}
-                          title={`vision by ${r.backend}`}
-                        >
-                          {backendChip(r.backend)!.label}
-                        </span>
-                      )}
+                      <ModelBadge backend={r.backend} model={r.model} size="xs" />
                     </div>
                     <div className="line-clamp-2 text-sm font-medium text-text">{r.title}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-overlay0">
@@ -325,6 +313,16 @@ export default function ReelsPage() {
                         </span>
                       )}
                     </div>
+                    {(r.collections ?? []).length > 0 && (
+                      // every shelf, not a truncated one — 1 in 4 reels sits on two
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {r.collections.map((c) => (
+                          <span key={c} onClick={(e) => e.stopPropagation()}>
+                            <CollectionChip name={c} onClick={() => setCollection(c)} />
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {r.tags.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {r.tags.slice(0, 4).map((t) => (
@@ -397,6 +395,7 @@ function ReelDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2 text-sm text-subtext">
               {r.genre && <Badge variant="genre">{r.genre}</Badge>}
+              <ModelBadge backend={r.tokens?.backend ?? r.backend} model={r.tokens?.model ?? r.model} showModel />
               <span>{r.author}</span>
               <a href={r.url} target="_blank" className="flex items-center gap-1 text-blue hover:underline">
                 <ExternalLink size={13} /> original
@@ -412,6 +411,15 @@ function ReelDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 </span>
               )}
             </div>
+
+            {(r.collections ?? []).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {r.collections.map((c) => (
+                  // filtering the grid means leaving the drawer — dropping `focus` closes it
+                  <CollectionChip key={c} name={c} onClick={() => setParams({ collection: c })} />
+                ))}
+              </div>
+            )}
 
             {r.tags?.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">

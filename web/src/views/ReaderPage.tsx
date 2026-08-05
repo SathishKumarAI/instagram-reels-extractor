@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ReelDetail, type ReelSummary } from "@/lib/api";
 import { ExternalLink, Hash, Quote, Search } from "lucide-react";
-import { backendChip } from "./ReelsPage";
+import { CollectionChip } from "@/components/TagChip";
+import { ModelBadge } from "@/components/ModelBadge";
 
 // Text-only "thesis" reader: left = sortable/filterable index of reels
 // (heading + sub-heading), right = the reel's full text as a long-form paper.
@@ -154,6 +155,7 @@ export default function ReaderPage() {
 
 function Paper({ id }: { id: string }) {
   const [r, setR] = useState<ReelDetail | null>(null);
+  const navigate = useNavigate();
   useEffect(() => {
     setR(null);
     api.reel(id).then(setR).catch(() => setR(null));
@@ -175,16 +177,13 @@ function Paper({ id }: { id: string }) {
           <span className="font-medium text-text">{r.author}</span>
           {r.timestamp && <span>· {fmtDate(r.timestamp)}</span>}
           {r.genre && <span className="rounded bg-surface0 px-2 py-0.5 text-xs capitalize text-mauve">{r.genre}</span>}
-          {(() => {
-            const chip = backendChip(String((r.tokens as { backend?: string })?.backend ?? ""));
-            return chip ? (
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${chip.cls}`} title="vision backend">
-                {chip.label}
-              </span>
-            ) : null;
-          })()}
+          <ModelBadge
+            backend={r.tokens?.backend ?? r.backend}
+            model={r.tokens?.model ?? r.model}
+            showModel
+          />
           {(r.collections ?? []).map((c) => (
-            <span key={c} className="rounded bg-surface0 px-2 py-0.5 text-xs text-peach">{c}</span>
+            <CollectionChip key={c} name={c} onClick={() => navigate(`/reels?collection=${encodeURIComponent(c)}`)} />
           ))}
           <a href={r.url} target="_blank" className="inline-flex items-center gap-1 text-blue hover:underline">
             <ExternalLink size={12} /> source
