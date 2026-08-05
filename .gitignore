@@ -21,6 +21,7 @@ reels_*.txt
 
 # python
 .venv/
+.venv-win/
 __pycache__/
 *.pyc
 *.egg-info/
@@ -33,6 +34,10 @@ dist/
 cookies.txt
 *.cookies
 cookies*.txt
+# a copy of a secret is still a secret — backups/exports of the above
+cookies*.bak
+*.txt.bak
+*.bak
 
 # whisper/easyocr model caches
 .models/

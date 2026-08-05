@@ -10,10 +10,20 @@ from pathlib import Path
 
 import pytest
 
-from reels_scrap.collections import Manifest, list_manifests, parse_collection_url, slugify
-from reels_scrap.config import Config
 from reels_scrap import docs
-from reels_scrap.render.consolidated import DocMeta, render_doc, render_index, CollectionCard
+from reels_scrap.collections import (
+    Manifest,
+    list_manifests,
+    parse_collection_url,
+    slugify,
+)
+from reels_scrap.config import Config
+from reels_scrap.render.consolidated import (
+    CollectionCard,
+    DocMeta,
+    render_doc,
+    render_index,
+)
 
 
 def _reel(rid: str, genre: str, **extra) -> dict:
@@ -38,18 +48,18 @@ def _reel(rid: str, genre: str, **extra) -> dict:
 def cfg(tmp_path: Path) -> Config:
     (tmp_path / "config.yaml").write_text(
         f"paths:\n  data_dir: {tmp_path/'data'}\n  output_dir: {tmp_path/'out'}\n"
-    )
+    , encoding="utf-8")
     c = Config.load(tmp_path / "config.yaml")
     for r in (_reel("AAA", "product"), _reel("BBB", "tutorial"), _reel("CCC", "product")):
-        (c.data_dir / f"{r['id']}.json").write_text(json.dumps(r))
+        (c.data_dir / f"{r['id']}.json").write_text(json.dumps(r), encoding="utf-8")
     return c
 
 
 def test_parse_collection_url():
     assert parse_collection_url(
-        "https://www.instagram.com/u/saved/front-end/18095255279194694/"
-    ) == ("front-end", "18095255279194694")
-    assert parse_collection_url("18095255279194694") == ("18095255279194694", "18095255279194694")
+        "https://www.instagram.com/u/saved/front-end/10000000000000004/"
+    ) == ("front-end", "10000000000000004")
+    assert parse_collection_url("10000000000000004") == ("10000000000000004", "10000000000000004")
     with pytest.raises(ValueError):
         parse_collection_url("https://example.com/not-a-collection")
 
@@ -93,11 +103,11 @@ def test_build_collection_doc_and_index(cfg: Config):
     save_manifest(cfg.output_dir, m)
     doc, n = docs.build_collection_doc(cfg, m)
     assert n == 3 and doc.exists()
-    assert doc.read_text().count("<article") == 3
+    assert doc.read_text(encoding="utf-8").count("<article") == 3
 
     index = docs.build_master_index(cfg)
     assert index.exists()
-    assert "front-end.html" in index.read_text()
+    assert "front-end.html" in index.read_text(encoding="utf-8")
 
 
 def test_build_collection_doc_skips_missing_reels(cfg: Config):

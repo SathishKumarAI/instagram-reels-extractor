@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import typer
@@ -10,6 +11,13 @@ from rich.console import Console
 
 from .config import Config
 from .models import Reel
+
+# Windows console/redirect defaults to cp1252 and dies on the ✓/✗ marks (and on any
+# emoji in a caption). Do this before Console() is built so rich picks it up — it is
+# what `PYTHONUTF8=1` was papering over.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 load_dotenv()
 app = typer.Typer(add_completion=False, help="Instagram reels -> text -> PDF -> docs.")
@@ -86,12 +94,18 @@ def render_cmd(config: str = typer.Option("config.yaml", "--config", "-c")):
 
 
 @app.command()
-def index(config: str = typer.Option("config.yaml", "--config", "-c")):
-    """Build/refresh the local semantic search index over all reels."""
+def index(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    full: bool = typer.Option(False, "--full", help="re-embed everything (after a model/schema change)"),
+):
+    """Build/refresh the local semantic search index over all reels.
+
+    Incremental by default — only reels changed since the last index are embedded.
+    """
     cfg = Config.load(config)
     from .search import build_index
 
-    n = build_index(cfg)
+    n = build_index(cfg, full=full)
     console.print(f"indexed [green]{n}[/] vectors.")
 
 
@@ -133,7 +147,7 @@ def fetch_collection_cmd(
         console.print("[yellow]no reels found in that collection.[/]")
         raise typer.Exit(1)
     if not print_only:
-        Path(out).write_text("\n".join(urls) + "\n")
+        Path(out).write_text("\n".join(urls) + "\n", encoding="utf-8")
         console.print(f"wrote [green]{len(urls)}[/] URLs -> {out}")
     for u in urls:
         console.print(u)
@@ -145,11 +159,33 @@ def _open_in_browser(path: Path) -> None:
     webbrowser.open(path.resolve().as_uri())
 
 
+def _browser_spec(cfg: Config, override: str | None = None) -> str:
+    """The browser (and profile) to read Instagram cookies from: `chrome` or
+    `chrome:Default`.
+
+    An explicit --browser wins, then an exported `auth.cookies_file` (the only
+    path that works on Windows once Chrome 127+ encrypts cookies app-bound),
+    then config `auth`. Naming the profile matters — without one yt-dlp picks the
+    most-recently-used profile, which is often not the one logged into Instagram.
+    """
+    spec = override or cfg.auth.cookies_file
+    if not spec:
+        name = cfg.auth.cookies_from_browser or "chrome"
+        spec = f"{name}:{cfg.auth.browser_profile}" if cfg.auth.browser_profile else name
+    if spec.endswith(".txt"):
+        # the yt-dlp download path reads cfg.auth directly, not this spec — point
+        # it at the same file so enumerate and download use one set of cookies
+        cfg.auth.cookies_file = spec
+    return spec
+
+
 @app.command()
 def collection(
     url: str = typer.Argument(..., help="Saved-collection URL or numeric id"),
     config: str = typer.Option("config.yaml", "--config", "-c"),
-    browser: str = typer.Option("chrome", "--browser", "-b", help="browser to read IG cookies from"),
+    browser: str = typer.Option(None, "--browser", "-b",
+                                help="browser to read IG cookies from (chrome | chrome:Default); "
+                                     "defaults to config auth"),
     limit: int = typer.Option(200, "--limit"),
     open_doc: bool = typer.Option(True, "--open/--no-open", help="open the doc when built"),
 ):
@@ -168,7 +204,7 @@ def collection(
     slug, cid = parse_collection_url(url)
 
     console.print(f"[cyan]fetching collection[/] {slug} ({cid})…")
-    reel_urls = fetch_collection(url, browser=browser, limit=limit)
+    reel_urls = fetch_collection(url, browser=_browser_spec(cfg, browser), limit=limit)
     if not reel_urls:
         console.print("[yellow]no reels found in that collection.[/]")
         raise typer.Exit(1)
@@ -177,7 +213,7 @@ def collection(
 
     # Drive the existing pipeline over these URLs (resume skips already-downloaded).
     urls_file = cfg.data_dir / f".collection-{slug}.txt"
-    urls_file.write_text("\n".join(reel_urls) + "\n")
+    urls_file.write_text("\n".join(reel_urls) + "\n", encoding="utf-8")
     cfg.source.type = "urls"
     cfg.source.urls_file = str(urls_file)
     cfg.source.resume = True
@@ -249,7 +285,8 @@ def list_sources_cmd(sources: str = typer.Option("sources.json", "--sources")):
 def sync(
     config: str = typer.Option("config.yaml", "--config", "-c"),
     sources: str = typer.Option("sources.json", "--sources"),
-    browser: str = typer.Option("chrome", "--browser", "-b"),
+    browser: str = typer.Option(None, "--browser", "-b",
+                                help="chrome | chrome:Default — defaults to config auth"),
     build_docs: bool = typer.Option(True, "--docs/--no-docs", help="rebuild docs after sync"),
     retry_failed: bool = typer.Option(False, "--retry-failed", help="re-attempt dead-lettered ids"),
     only: list[str] = typer.Option(None, "--only", help="limit to named source(s); repeatable"),
@@ -288,9 +325,21 @@ def sync(
         cfg.extract.vision_backend = backend
         console.print(f"[cyan]vision backend[/] → {backend}"
                       + (f" ({cfg.extract.vision_local.model})" if backend == "local" else ""))
+    from .ingest.collection import session_ok
     from .sources import poll_all
 
-    results = poll_all(cfg, config, sources_file=sources, browser=browser,
+    # probe once up front: an expired cookie fails all 20 sources identically, and
+    # 20 identical errors hide the one-line real cause (re-export the cookie file)
+    spec = _browser_spec(cfg, browser)
+    ok, why = session_ok(spec)
+    if ok:
+        console.print(f"[green]auth[/] {why} ({spec})")
+    else:
+        console.print(f"[red]auth: {why}[/]")
+        console.print("[dim]every source will fail until this is fixed — "
+                      "re-export cookies.txt (see docs/PRIVACY.md)[/]")
+
+    results = poll_all(cfg, config, sources_file=sources, browser=spec,
                        build_docs=build_docs, retry_failed=retry_failed,
                        only=only or None)
     if not results:
@@ -301,7 +350,9 @@ def sync(
     total_new = 0
     for r in results:
         total_new += r.ingested
-        if r.error:
+        if r.rate_limited:
+            console.print(f"  [yellow]⏳[/] {r.name}: {r.error}")
+        elif r.error:
             console.print(f"  [red]✗[/] {r.name}: {r.error}")
         else:
             console.print(
@@ -311,6 +362,34 @@ def sync(
     console.print(f"\n[cyan]{total_new}[/] new reel(s) ingested across {len(results)} source(s).")
     if open_index and build_docs:
         _open_in_browser(cfg.output_dir / "collections" / "index.html")
+
+
+@app.command(name="discover")
+def discover_cmd(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    browser: str = typer.Option(None, "--browser", "-b"),
+    max_requests: int = typer.Option(40, "--max-requests", help="hard ceiling for this run"),
+    authors: int = typer.Option(6, "--authors", help="how many saved-from creators to check"),
+    hashtags: int = typer.Option(4, "--hashtags", help="how many of your top tags to check"),
+    min_score: float = typer.Option(0.35, "--min-score", help="drop candidates below this"),
+):
+    """Propose reels worth saving, from creators you already save and your top tags.
+
+    Reads only, downloads nothing — accepted candidates are queued for the next
+    sync. Instagram rate-limits hard, so the run has a request budget and stops on
+    the first 429 rather than retrying into a block.
+    """
+    cfg = Config.load(config)
+    from .discover import discover
+
+    s = discover(cfg, browser=_browser_spec(cfg, browser), max_requests=max_requests,
+                 authors=authors, hashtags=hashtags, min_score=min_score)
+    console.rule("[bold green]discover")
+    console.print(f"  found [cyan]{s['found']}[/] · kept [green]{s['kept']}[/] "
+                  f"· pending review [bold]{s['pending']}[/]")
+    console.print(f"  requests {s['requests_used']}/{s['request_budget']}")
+    if s["stopped_early"]:
+        console.print(f"  [yellow]stopped early:[/] {s['stopped_early']}")
 
 
 @app.command()

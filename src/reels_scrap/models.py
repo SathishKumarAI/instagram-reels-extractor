@@ -33,8 +33,10 @@ class Reel(BaseModel):
     # identity / ingest
     id: str
     url: str
-    author: str = ""
+    author: str = ""              # display name, e.g. "Bharat Aanjna ( HINDIAN )"
+    author_handle: str = ""       # @username — the only form IG's API accepts
     title: str = ""
+
     timestamp: datetime | None = None
 
     # metadata
@@ -59,12 +61,19 @@ class Reel(BaseModel):
     transcript_confidence: float | None = None  # whisper language-detection probability [0..1]
     ocr_text: list[str] = Field(default_factory=list)
     summary: str = ""
+    key_points: list[str] = Field(default_factory=list)   # actionable takeaways
+    on_screen_text: list[str] = Field(default_factory=list)  # verbatim overlay text
     genre: str = ""                                       # tutorial|product|educational|...
     tags: list[str] = Field(default_factory=list)         # topical tags for search/filter
     structured: dict[str, Any] = Field(default_factory=dict)  # genre-specific typed fields
     facts: list[Fact] = Field(default_factory=list)      # claims with provenance
     # vision usage {input, cache_read, output, cost_usd} + provenance {backend, model}
     tokens: dict[str, Any] = Field(default_factory=dict)
+    # one entry per backend that has ever summarised this reel, keyed by backend name
+    # ("claude-cli", "local", …): {summary, genre, tags, structured, facts, tokens,
+    # elapsed_s, created_at}. The top-level fields above stay the ACTIVE variant so
+    # nothing downstream needs to know this exists.
+    variants: dict[str, Any] = Field(default_factory=dict)
 
     # render outputs
     markdown_path: str | None = None
@@ -81,9 +90,11 @@ class Reel(BaseModel):
 
     def save(self, data_dir: Path) -> Path:
         p = self.json_path(data_dir)
-        p.write_text(self.model_dump_json(indent=2))
+        # explicit utf-8: captions carry emoji and non-Latin text, and Windows
+        # defaults to cp1252, which cannot even read back what it wrote
+        p.write_text(self.model_dump_json(indent=2), encoding="utf-8")
         return p
 
     @classmethod
-    def load(cls, path: Path) -> "Reel":
-        return cls.model_validate_json(path.read_text())
+    def load(cls, path: Path) -> Reel:
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))

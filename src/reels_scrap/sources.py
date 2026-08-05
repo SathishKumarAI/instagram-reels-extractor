@@ -26,14 +26,15 @@ Design (why it's a data-engineering shape, not just a loop):
 Registry entry (sources.json):
 
     {"sources": [
-      {"name": "phd-opportunities", "type": "collection",
-       "url": ".../saved/phd-opportunities/18354529171213909/",
+      {"name": "topic-research", "type": "collection",
+       "url": ".../saved/topic-research/10000000000000001/",
        "enabled": true, "limit": 200}
     ]}
 """
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
@@ -44,6 +45,10 @@ from .observability import log
 
 DEFAULT_SOURCES_FILE = "sources.json"
 STATE_FILENAME = "sources_state.json"
+
+
+class RateLimited(RuntimeError):
+    """IG threw 429. Transient — the source is fine, the run is just too eager."""
 
 
 # ── registry ────────────────────────────────────────────────────────────────
@@ -68,13 +73,13 @@ def load_sources(path: str | Path = DEFAULT_SOURCES_FILE) -> list[Source]:
     p = Path(path)
     if not p.exists():
         return []
-    raw = json.loads(p.read_text())
+    raw = json.loads(p.read_text(encoding="utf-8"))
     return [Source(**s) for s in raw.get("sources", [])]
 
 
 def save_sources(sources: list[Source], path: str | Path = DEFAULT_SOURCES_FILE) -> Path:
     p = Path(path)
-    p.write_text(json.dumps({"sources": [asdict(s) for s in sources]}, indent=2) + "\n")
+    p.write_text(json.dumps({"sources": [asdict(s) for s in sources]}, indent=2) + "\n", encoding="utf-8")
     return p
 
 
@@ -121,7 +126,7 @@ def _reel_ids_from_urls(urls: list[str]) -> list[str]:
 
 
 def _profile_username(url: str) -> str:
-    """Pull the handle from a profile URL: .../instagram.com/_tech_guff_/ -> _tech_guff_."""
+    """Pull the handle from a profile URL: .../instagram.com/some_creator/ -> some_creator."""
     import re
 
     m = re.search(r"instagram\.com/([^/?#]+)", url)
@@ -150,8 +155,19 @@ def _enumerate_profile(username: str, limit: int, browser: str = "chrome") -> li
         "X-Requested-With": "XMLHttpRequest", "Referer": "https://www.instagram.com/",
     })
     # 1. resolve username -> numeric user id
-    r = s.get("https://www.instagram.com/api/v1/users/web_profile_info/",
-              params={"username": username}, timeout=30)
+    # 429 is IG throttling, not a broken source — back off and try again a couple
+    # of times before giving up for this run. Never parallelise these calls.
+    for attempt in range(3):
+        r = s.get("https://www.instagram.com/api/v1/users/web_profile_info/",
+                  params={"username": username}, timeout=30)
+        if r.status_code != 429:
+            break
+        if attempt < 2:
+            wait = 30 * (attempt + 1)
+            log.warning("profile %s rate-limited (429) — waiting %ds", username, wait)
+            time.sleep(wait)
+    if r.status_code == 429:
+        raise RateLimited(f"profile lookup rate-limited (429) for {username!r}")
     if r.status_code != 200:
         raise RuntimeError(f"profile lookup HTTP {r.status_code} for {username!r}")
     uid = r.json()["data"]["user"]["id"]
@@ -184,8 +200,12 @@ def _enumerate_profile(username: str, limit: int, browser: str = "chrome") -> li
 def enumerate_source(src: Source, browser: str = "chrome") -> list[str]:
     """Current reel URLs for a source, newest-first (as IG returns them)."""
     if src.type in {"collection", "saved"}:
-        from .ingest.collection import fetch_collection
+        from .ingest.collection import fetch_collection, fetch_saved_feed
 
+        # "saved" without a numeric collection id = the default "All Posts" feed,
+        # where a reel lands when you save it without choosing a collection.
+        if src.type == "saved" and not re.search(r"/saved/[^/]+/\d+", src.url):
+            return fetch_saved_feed(browser=browser, limit=src.limit)
         return fetch_collection(src.url, browser=browser, limit=src.limit)
     if src.type == "profile":
         return _enumerate_profile(_profile_username(src.url), src.limit, browser=browser)
@@ -203,12 +223,12 @@ def _state_path(output_dir: Path) -> Path:
 
 def load_state(output_dir: Path) -> dict:
     p = _state_path(output_dir)
-    return json.loads(p.read_text()) if p.exists() else {}
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
 def save_state(output_dir: Path, state: dict) -> Path:
     p = _state_path(output_dir)
-    p.write_text(json.dumps(state, indent=2) + "\n")
+    p.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return p
 
 
@@ -223,6 +243,7 @@ class SourceResult:
     skipped: int = 0      # already in pool (deduped)
     doc: str = ""
     error: str = ""
+    rate_limited: bool = False   # 429: transient, retry next run — not a real failure
     new_ids: list[str] = field(default_factory=list)
     failed_ids: list[str] = field(default_factory=list)  # ingested-this-run → dead-letter
 
@@ -248,7 +269,7 @@ def poll_text_source(
     res = SourceResult(name=src.name, slug=src.slug)
     try:
         records = fetch_feed_records(src)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         res.error = str(e)
         log.error("text source %s fetch failed: %s", src.name, e)
         return res
@@ -266,7 +287,7 @@ def poll_text_source(
         try:
             extract_all(r, cfg)              # text structuring (re-saves with fields)
             res.ingested += 1
-        except Exception as ex:              # noqa: BLE001
+        except Exception as ex:
             log.error("text extract failed %s: %s", r.id, ex)
             res.failed_ids.append(r.id)
 
@@ -312,7 +333,13 @@ def poll_source(
     res = SourceResult(name=src.name, slug=src.slug)
     try:
         urls = enumerate_source(src, browser=browser)
-    except Exception as e:  # noqa: BLE001
+    except RateLimited as e:
+        # not a broken source — leave the previous state intact and try tomorrow
+        res.error = f"{e} — will retry next run"
+        res.rate_limited = True
+        log.warning("source %s: %s", src.name, res.error)
+        return res
+    except Exception as e:
         res.error = str(e)
         log.error("source %s enumerate failed: %s", src.name, e)
         return res
@@ -323,7 +350,7 @@ def poll_source(
     # dedup: already downloaded OR known-dead → not "new"
     seen = existing | dead
 
-    new_pairs = [(i, u) for i, u in zip(all_ids, urls) if i not in seen]
+    new_pairs = [(i, u) for i, u in zip(all_ids, urls, strict=False) if i not in seen]
     res.new = len(new_pairs)
     res.skipped = res.current - res.new
     res.new_ids = [i for i, _ in new_pairs]
@@ -331,23 +358,24 @@ def poll_source(
     if new_pairs:
         # feed ONLY the new URLs through the pipeline (resume double-guards dedup)
         urls_file = cfg.data_dir / f".sync-{src.slug}.txt"
-        urls_file.write_text("\n".join(u for _, u in new_pairs) + "\n")
+        urls_file.write_text("\n".join(u for _, u in new_pairs) + "\n", encoding="utf-8")
         cfg.source.type = "urls"
         cfg.source.urls_file = str(urls_file)
         cfg.source.resume = True
-        reels, _ = run_pipeline(cfg, config_path,
-                                progress=lambda s, c, t, m: log.info("[%s] %s", s, m))
+        _reels, _ = run_pipeline(cfg, config_path,
+                                progress=lambda s, c, t, m: log.info("[%s] %s", s, m),
+                                refresh_index=False)  # once for the whole sync, in poll_all
         # count what actually landed; anything that didn't → dead-letter
         landed = pool_ids(cfg.data_dir)
         res.ingested = sum(1 for i, _ in new_pairs if i in landed)
         res.failed_ids = [i for i, _ in new_pairs if i not in landed]
 
     # refresh membership manifest (full current list) + doc, even if nothing new
-    slug, cid = (src.slug, "")
+    cid = ""
     try:
-        slug, cid = parse_collection_url(src.url)
+        _slug, cid = parse_collection_url(src.url)
     except ValueError:
-        pass
+        pass   # a urls/saved source has no collection id — the manifest slug is enough
     m = Manifest(
         slug=src.slug,
         title=src.name.replace("-", " ").title(),
@@ -415,7 +443,24 @@ def poll_all(
             "error": res.error,
         }
 
+    # feeds handed us each poster's @handle during enumerate — stamp it onto the
+    # records so discovery can follow creators you actually save
+    from .ingest.collection import apply_handles
+
+    apply_handles(cfg)
+
     if build_docs:
         build_master_index(cfg)
+    # one embedding pass for the whole sync — per-source it re-embedded the
+    # entire corpus once per source (best-effort; never fails the run)
+    if any(r.ingested for r in results):
+        try:
+            log.info("[index] building search index…")
+            from .search import build_index
+
+            build_index(cfg)
+            log.info("[index] index built")
+        except Exception as e:
+            log.warning("search index skipped: %s", e)
     save_state(cfg.output_dir, state)
     return results

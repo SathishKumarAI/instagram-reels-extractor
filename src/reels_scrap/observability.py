@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 log = logging.getLogger("reels_scrap")
@@ -21,7 +22,9 @@ def setup_logging(output_dir: Path, level: int = logging.INFO) -> Path:
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S")
     ch = logging.StreamHandler()
     ch.setFormatter(fmt)
-    fh = logging.FileHandler(logfile)
+    # rotate: run.log is append-only across every sync and would grow forever.
+    # The Sync tab tails this file, so keep the live one uncompressed.
+    fh = RotatingFileHandler(logfile, maxBytes=5_000_000, backupCount=3, encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     log.addHandler(ch)
     log.addHandler(fh)
@@ -64,7 +67,7 @@ class RunReport:
     def write(self, output_dir: Path) -> Path:
         payload = {
             "started_at": self.started_at,
-            "finished_at": datetime.now(tz=timezone.utc).isoformat(),
+            "finished_at": datetime.now(tz=UTC).isoformat(),
             "config": self.config_path,
             "source_type": self.source_type,
             "summary": self.summary(),
@@ -74,13 +77,13 @@ class RunReport:
             },
         }
         out = output_dir / "run_report.json"
-        out.write_text(json.dumps(payload, indent=2))
+        out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return out
 
 
 def new_report(config_path: str, source_type: str) -> RunReport:
     return RunReport(
-        started_at=datetime.now(tz=timezone.utc).isoformat(),
+        started_at=datetime.now(tz=UTC).isoformat(),
         config_path=config_path,
         source_type=source_type,
     )
