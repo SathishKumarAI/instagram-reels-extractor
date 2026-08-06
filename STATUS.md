@@ -133,18 +133,77 @@ Update this when you STOP working, not when you start.
     `/reels?collection=<slug>` is the deep link from reader and table.
   - Measured on the live corpus: **644 Claude / 25 local / 5 unknown**, 19 shelves,
     **175 reels on 2+ shelves**, 10 on none.
-- **Where it stands:** 77 tests pass, ruff clean, `tsc -b` + `vite build` clean.
-  13 tabs. Corpus 674 reels.
+- **The model bench is built and has been run (2026-08-06).** This is now a
+  research project with its own home: `docs/research/`.
+  - **Profiles** (`profiles.py`): a model is a *name*, and `reel.variants` is keyed
+    by it, so eight models coexist on one reel. `claude-cli`/`api`/`local` still
+    resolve with no config change — the 641 stored variants never moved. A model
+    in `models.yaml` resolves by name too, which is why the hand-commented
+    `config-local.yaml` is never rewritten.
+  - **Registry** (`models.yaml`, `modelreg.py`): `models list|pull`. **7/7
+    installed**, ~38GB. Each entry earns its place by the contrast it tests; a
+    pull is always explicit and a hand-built model is never rebuilt.
+  - **Bench** (`bench.py`): `bench sample|run|report`. One seeded, genre-stratified
+    30-reel sample, cached frames and transcripts reused, resumable, one model
+    resident at a time. Failures land in `runs.jsonl`, never in an average.
+  - **Report**: `docs/research/BENCH-2026-08-06.md` — metrics, agreement vs the
+    Claude arm, attempts, and a written why-they-differ pass grounded in quoted
+    claims. Also `MODELS.md`, `UI-TABS.md`, `COSTS.md`, and one prompt per build
+    step in `docs/research/prompts/`.
+- **What the bench found** (30 reels, identical frames, $0 for every local arm):
+
+  | model | facts | tags | summary | fields | empty | sec | $/reel |
+  |---|---|---|---|---|---|---|---|
+  | claude-cli (ref) | 7.4 | 5.7 | 833 | 4.0 | 0 | 29.7 | $0.34 |
+  | qwen3vl-8b | 6.4 | 5.9 | 419 | 3.0 | 0 | 42.9 | $0 |
+  | qwen3vl-4b | 5.9 | 5.3 | 448 | 2.5 | 2 | 29.6 | $0 |
+  | gemma4-12b | 5.6 | 4.9 | 377 | 2.7 | 2 | 60.9 | $0 |
+  | minicpm-v45 | 5.6 | 6.6 | 401 | 2.1 | 0 | **7.3** | $0 |
+  | reels-vision | 5.2 | 4.9 | 293 | 1.8 | 1 | 7.7 | $0 |
+  | qwen3vl-2b | 0.9 | 3.1 | 177 | 21 empty | | 44.9 | $0 |
+  | deepseek-ocr | arm abandoned — 0 usable in 10 attempts | | | | | | |
+
+  Different failure classes, not one axis. **minicpm-v45** is the value pick —
+  within 0.8 facts of the 8B at a fifth of the time. **qwen3vl-4b is the risky
+  one**: the only arm asserting claims that contradict the reference ("Touching
+  the kitchen area is now considered illegal under the 2025 rules"). **qwen3vl-2b
+  is unusable as shipped.** **deepseek-ocr can read but cannot be instructed** —
+  its template-echo output contained real on-screen text.
+- **Nine pipeline bugs found by running the experiment** — each one had been
+  making a model look worse than it is:
+  1. reasoning models put the answer in `reasoning`, not `content`;
+  2. a 1500- then 4000-token budget ran out before the JSON closed (now 8000);
+  3. a greedy `{.*}` spanned several objects — take the finished one, not the sketch;
+  4. `"facts": ["…"]` (a claim with no frame) was dropped entirely;
+  5. `_is_fragment` rejected any claim starting lower case, deleting the output of
+     models that do not capitalise;
+  6. an empty variant counted as a processed reel;
+  7. the claim matcher scored the narration ("Frame 2 displays…"), punishing the
+     models that obey our own grounding instruction — agreement 5% → 12%;
+  8. every text-mode subprocess decoded as cp1252 on Windows;
+  9. `claude -p <prompt>` passed the prompt as argv, so a large analysis silently
+     degraded to "unavailable" (WinError 206). Prompts go on stdin now.
+- **Also shipped:** any installed model can run a sync (`/api/sync` + one shared
+  `ModelSelect` on Sync, Sources and Compare); the Compare scoreboard shows
+  `$/reel`, `$ total` and an `empty` column; a UI sync no longer silently skips
+  transcripts and OCR.
+- **Where it stands:** **114 tests pass**, ruff clean, `tsc -b` + `vite build`
+  clean. 13 tabs. Corpus 674 reels. API + Vite dev server both up.
 - **Known gaps, stated plainly:**
-  - Author-based discovery is code-complete but Instagram is 429ing the profile
-    endpoint after a session of heavy use — needs a cooldown to verify end to end.
-    The hashtag path works (27 candidates found).
-  - Local RAG chat (L1) not built — see the plan for why.
-  - The Epic M UI was verified by build + live API responses, not by eye: the
-    Chrome extension is not connected on this box.
-- **Next session:** Epic M continued — **M2** (inline local-vs-cloud diff in the
-  reader; 641 reels already have both variants and `compare.diff_facts` is pure,
-  but there is still **no read-only endpoint that diffs stored variants** —
-  `POST /api/reels/{id}/compare` re-runs the models), then M3 (filter by backend)
-  and M7 (collection on search hits — `SearchHit` carries none today).
-- **Blocked on:** nothing. Open questions for the owner in `docs/PLAN-2026-08.md` §5.
+  - **Every local model misses caption-derived claims** (`#manuspartner`, `#ad`)
+    and small print. That is an input problem, not a ranking — the caption may not
+    be reaching the model. First thing to chase.
+  - `deepseek-ocr` was stopped at 10 of 30 attempts once the failure mode repeated
+    ten times; the report says so rather than implying a full arm.
+  - The Claude arm is 28 of 30: two reels return exit 0 with empty stdout from the
+    CLI, twice each.
+  - Author-based discovery is code-complete but Instagram 429s the profile
+    endpoint after heavy use. The hashtag path works (27 candidates).
+  - Local RAG chat (L1) not built. The UI was verified by build + live API, not by
+    eye — no Chrome extension on this box, and the devtools MCP loses its browser.
+- **Next session:** the caption/fine-print gap above, then Epic M **M2** (inline
+  local-vs-cloud diff in the reader — 641 reels have both variants and
+  `diff_facts` is pure, but there is still **no read-only endpoint that diffs
+  stored variants**), M3 (filter by model) and M7 (collection on search hits).
+- **Blocked on:** nothing. Two decisions are the owner's: whether a local model
+  becomes the sync default, and whether to re-extract the corpus with one.

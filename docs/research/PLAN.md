@@ -11,7 +11,7 @@ check, and updates the Status column here.
 | 3 | Bench sample + run | `src/reels_scrap/bench.py`, `bench sample`, `bench run` | same seed → same sample; stored pairs skipped; a failing arm records an error row and the run continues | done 2026-08-05 |
 | 4 | Scoreboard + report | per-profile scoreboard, `bench report` → `BENCH-<date>.md` | scoreboard groups by profile; report renders from a fake corpus with the analysis pass stubbed | done 2026-08-05 |
 | 5 | UI | Compare tab picks from N profiles | `tsc -b` clean; picker lists declared profiles | done 2026-08-05 |
-| 6 | Run the experiment | pulled models, 30-reel sample × N arms, written analysis | the results doc exists and its numbers come from `runs.jsonl` | pending |
+| 6 | Run the experiment | 7 models pulled, 30-reel sample × 7 local arms + the Claude reference, written analysis | `docs/research/BENCH-2026-08-06.md`, numbers from `runs.jsonl` | done 2026-08-06 |
 
 ## Phase order rationale
 
