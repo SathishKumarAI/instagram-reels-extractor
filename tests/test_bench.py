@@ -143,3 +143,18 @@ def test_agreement_only_counts_shared_reels(corpus, tmp_path):
     assert a["agreement"] == 0.5
     ex = disagreement_examples(corpus, limit=5)
     assert ex and ex[0]["model"] == "small" and ex[0]["only_reference"]
+
+
+def test_run_stats_counts_each_reel_once_after_a_rerun(corpus, tmp_path):
+    """The log is append-only and arms get re-run after a fix. Counting every line
+    reported 60 attempts for a 30-reel arm and averaged in superseded results."""
+    for row in [
+        {"profile": "m", "reel_id": "R00", "ok": False, "seconds": 100, "error": "boom"},
+        {"profile": "m", "reel_id": "R00", "ok": True, "seconds": 10},   # the re-run
+        {"profile": "m", "reel_id": "R01", "ok": True, "seconds": 20},
+    ]:
+        bench._log_run(corpus, row)
+
+    stats = bench.run_stats(corpus)["m"]
+    assert (stats["ok"], stats["failed"]) == (2, 0)     # not 2 ok + 1 failed
+    assert stats["avg_seconds"] == 15.0                 # the 100s attempt is superseded

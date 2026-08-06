@@ -53,6 +53,25 @@ def analyse(examples: list[dict], backend: str = "claude-cli") -> str:
         return ""
 
 
+_CAVEATS = """\
+- **One variable.** Every arm ran over the same fixed sample, the same cached
+  frames and the same prompt. Only the model changed.
+- **`empty` is a failure that parsed.** A variant with no claims at all is
+  counted here, not averaged in as a processed reel.
+- **`salvaged` means the answer came out of a reasoning trace**, not a finished
+  reply — a reasoning model whose budget ran out mid-thought.
+- **Agreement is not accuracy.** It measures whether two models made the same
+  claim, not whether either is right. Claims are matched by content: frame
+  pointers ("Frame 3 shows…") and reporting verbs are stripped first, and two
+  claims quoting the same on-screen label count as one.
+- **The reference arm is not ground truth.** `claude-cli` is the arm the corpus
+  was built with, so every other model is described relative to it.
+- **Cost is a price, not a bill.** See `docs/research/COSTS.md`.
+- **Seconds are wall-clock on one busy workstation** (RTX 5070 Ti, 16GB, one
+  model resident at a time). Treat them as ratios, not benchmarks.
+"""
+
+
 def _metrics_table(rows: list[dict]) -> str:
     head = ("| model | reels | facts | tags | summary chars | structured fields | "
             "empty | salvaged | sec | $/reel |\n"
@@ -78,14 +97,20 @@ def _agreement_table(agree: dict[str, dict], reference: str) -> str:
     return head + body
 
 
-def _runs_table(stats: dict[str, dict]) -> str:
+def _runs_table(stats: dict[str, dict], scored: set[str], sample_size: int) -> str:
     if not stats:
         return "_No run log yet — variants were written before the bench existed._\n"
-    head = "| model | attempts ok | failed | avg sec |\n|---|---|---|---|\n"
-    body = "".join(
-        f"| `{k}` | {v['ok']} | {v['failed']} | {v['avg_seconds']} |\n"
-        for k, v in sorted(stats.items())
-    )
+    head = "| model | reels ok | failed | avg sec | note |\n|---|---|---|---|---|\n"
+    body = ""
+    for k, v in sorted(stats.items()):
+        attempted = v["ok"] + v["failed"]
+        if k not in scored and v["ok"] == 0:
+            note = f"**arm abandoned** — {attempted} attempts, no usable output"
+        elif attempted < sample_size:
+            note = f"stopped at {attempted}/{sample_size}"
+        else:
+            note = ""
+        body += f"| `{k}` | {v['ok']} | {v['failed']} | {v['avg_seconds']} | {note} |\n"
     return head + body
 
 
@@ -115,15 +140,21 @@ def build_report(cfg: Config, with_analysis: bool = True, examples: int = 40,
         f"- Sample: **{len(reel_ids) if reel_ids else 'whole corpus'}** reels ({strata_line})\n"
         f"- Reference arm: `{reference}`\n"
         f"- Reels carrying at least one variant: **{board['reels_compared']}**\n",
-        "\n## Metrics\n\nEvery average is over the reels that arm actually produced.\n\n",
+        "\n## Metrics\n\nEvery average is over the reels that arm actually produced. "
+        "`local` is not a separate model: it is the same `reels-vision` weights as "
+        "stored by the earlier corpus backfill, before this session's extraction "
+        "fixes — keep it as a before/after, not as an eighth arm.\n\n",
         _metrics_table(board["backends"]),
         f"\n## Agreement with `{reference}`\n\n"
         "Claims are matched by containment, not exact text — the same claim phrased "
         "with more detail still counts as shared. Only reels where both arms "
         "produced a variant are counted.\n\n",
         _agreement_table(agree, reference),
-        "\n## Attempts\n\nFailures are listed, not averaged away.\n\n",
-        _runs_table(stats),
+        "\n## Attempts\n\nFailures are listed, not averaged away. One row per reel: "
+        "an arm that was re-run after a fix counts once, at its latest result.\n\n",
+        _runs_table(stats, {r["backend"] for r in board["backends"]},
+                    len(reel_ids) if reel_ids else 0),
+        "\n## How to read this\n\n" + _CAVEATS,
     ]
     if narrative:
         parts += [f"\n## Why they differ\n\nWritten from {len(ex)} disagreeing claims "

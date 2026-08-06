@@ -38,9 +38,12 @@ def _via_cli(prompt: str, timeout: int) -> str:
     if not claude:
         raise LLMError("claude CLI not found; set backend=api")
     try:
+        # The prompt goes on STDIN, not argv: Windows caps a command line at ~32k
+        # characters and a bench analysis over a few dozen claims sails past it
+        # (WinError 206). stdin has no such limit.
         proc = subprocess.run(
-            [claude, "-p", prompt],
-            capture_output=True, text=True, timeout=timeout,
+            [claude, "-p"],
+            input=prompt, capture_output=True, text=True, timeout=timeout,
             encoding="utf-8", errors="replace",   # cp1252 default cannot read the reply
         )
     except subprocess.TimeoutExpired as e:

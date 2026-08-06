@@ -202,17 +202,26 @@ def run(
 
 
 def run_stats(cfg: Config) -> dict:
-    """Per-profile attempt counts from the run log — including the arms that failed."""
+    """Per-profile attempt counts from the run log — including the arms that failed.
+
+    Only the LAST attempt at each (profile, reel) counts. The log is append-only
+    and an arm may be re-run — after a fix, or with `--force` — so counting every
+    line would report 60 attempts for a 30-reel arm and average in results that
+    were superseded.
+    """
     p = cfg.output_dir / RUNS_FILE
     if not p.exists():
         return {}
-    ok, fail, secs = Counter(), Counter(), Counter()
+    latest: dict[tuple[str, str], dict] = {}
     for line in p.read_text(encoding="utf-8").splitlines():
         try:
             row = json.loads(line)
         except ValueError:
             continue
-        prof = row.get("profile", "")
+        latest[(row.get("profile", ""), row.get("reel_id", ""))] = row
+
+    ok, fail, secs = Counter(), Counter(), Counter()
+    for (prof, _), row in latest.items():
         (ok if row.get("ok") else fail)[prof] += 1
         secs[prof] += float(row.get("seconds") or 0)
     return {

@@ -301,7 +301,8 @@ def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     # cache), so `input` here is an UPPER BOUND, not the raw vision-call tokens. For
     # precise per-reel cost use vision_backend=api (msg.usage is the true call cost).
     proc = subprocess.run(
-        [claude, "-p", prompt, "--allowedTools", "Read", "--output-format", "json"],
+        [claude, "-p", "--allowedTools", "Read", "--output-format", "json"],
+        input=prompt,   # not argv: Windows caps a command line at ~32k chars
         capture_output=True, text=True, timeout=CLI_TIMEOUT,
         # a caption with an emoji in the reply is enough to kill the decode on
         # Windows, where text mode defaults to cp1252

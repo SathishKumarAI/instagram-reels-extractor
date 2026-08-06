@@ -49,7 +49,8 @@ def _via_cli(prompt: str, cfg: Config) -> tuple[dict, dict]:
     if not claude:
         raise RuntimeError("claude CLI not found; set vision_backend=api")
     proc = subprocess.run(
-        [claude, "-p", prompt, "--output-format", "json"],
+        [claude, "-p", "--output-format", "json"],
+        input=prompt,   # not argv: Windows caps a command line at ~32k chars
         capture_output=True, text=True, timeout=180,
         encoding="utf-8", errors="replace",   # cp1252 default cannot read our own captions
     )
