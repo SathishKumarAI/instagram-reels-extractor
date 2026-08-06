@@ -132,6 +132,27 @@ def _parse_json(text: str) -> dict:
     return best
 
 
+def message_text(choice: dict) -> tuple[str, bool]:
+    """The text of one OpenAI-style choice, and whether it had to be salvaged.
+
+    A reasoning model (qwen3-vl and friends) puts its draft in `reasoning` and can
+    return an empty `content` when the budget runs out mid-thought. Indexing
+    `["content"]` blindly turns that into an AttributeError with no clue attached,
+    so every caller goes through here.
+    """
+    msg = (choice or {}).get("message", {}) or {}
+    text = (msg.get("content") or "").strip()
+    if text:
+        return text, False
+    salvaged = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
+    if salvaged:
+        return salvaged, True
+    raise RuntimeError(
+        f"model returned no content (finish_reason={(choice or {}).get('finish_reason')!r})"
+        " — a reasoning model needs a larger max_tokens"
+    )
+
+
 def _norm_tags(raw) -> list[str]:
     """Lowercase, hyphenate, de-dupe tags; drop empties. Cap at 8."""
     out: list[str] = []
@@ -282,6 +303,9 @@ def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     proc = subprocess.run(
         [claude, "-p", prompt, "--allowedTools", "Read", "--output-format", "json"],
         capture_output=True, text=True, timeout=CLI_TIMEOUT,
+        # a caption with an emoji in the reply is enough to kill the decode on
+        # Windows, where text mode defaults to cp1252
+        encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI failed: {(proc.stderr or '').strip()[:200]}")
@@ -379,22 +403,7 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
         raise RuntimeError(f"local vision HTTP {resp.status_code}: {resp.text[:200]}")
     payload = resp.json()
     choice = payload["choices"][0]
-    msg = choice.get("message", {}) or {}
-    text = (msg.get("content") or "").strip()
-    salvaged = False
-    if not text:
-        salvaged = True
-        # Reasoning models (qwen3-vl and friends) put their draft in `reasoning` and
-        # can return an empty `content` when the budget runs out mid-thought. The
-        # JSON is usually in the reasoning; if it is not, say WHY rather than
-        # reporting an empty model output.
-        text = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
-        if not text:
-            raise RuntimeError(
-                f"local vision returned no content (finish_reason="
-                f"{choice.get('finish_reason')!r}, max_tokens={lc.max_tokens}) — "
-                "a reasoning model needs a larger max_tokens"
-            )
+    text, salvaged = message_text(choice)
     u = payload.get("usage", {}) or {}
     tokens = {
         "input": int(u.get("prompt_tokens", 0)),
@@ -449,7 +458,7 @@ def _via_local_2pass(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     if r.status_code != 200:
         raise RuntimeError(f"local read pass HTTP {r.status_code}: {r.text[:200]}")
     p1 = r.json()
-    readings = p1["choices"][0]["message"]["content"].strip()
+    readings, _ = message_text(p1["choices"][0])
     u1 = p1.get("usage", {}) or {}
     log.info("%s: [local/pass1] read %d chars from %d frames", reel.id, len(readings), len(items))
 

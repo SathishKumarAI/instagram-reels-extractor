@@ -48,6 +48,10 @@ class SyncIn(BaseModel):
     backend: str = "claude-cli"       # any profile name — see GET /api/profiles
     browser: str = "chrome"
     only: list[str] | None = None
+    # skip the GPU transcript + OCR stages. Off by default: a UI-started sync used
+    # to silently produce thinner records than the same sync from the CLI, and
+    # missing audio was the single biggest cause of vague summaries.
+    fast: bool = False
 
 
 # module-level status for the single background sync (polled by the UI)
@@ -616,7 +620,8 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             from ..compare import cfg_for_backend
             from ..sources import poll_all
             c = cfg_for_backend(backend, config_path)
-            c.extract.transcript = c.extract.ocr = False   # claude-only style (fast)
+            if body.fast:
+                c.extract.transcript = c.extract.ocr = False
             c.extract.vision = True
             try:
                 results = poll_all(c, config_path, browser=body.browser or "chrome",

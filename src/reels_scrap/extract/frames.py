@@ -70,7 +70,8 @@ def has_audio_stream(video: Path) -> bool:
     ensure_ffmpeg()
     # ffmpeg has no probe-only mode; -i to a null muxer prints stream info to stderr.
     cmd = [ffmpeg_bin(), "-hide_banner", "-i", str(video)]
-    out = subprocess.run(cmd, capture_output=True, text=True).stderr
+    out = subprocess.run(cmd, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace").stderr
     return "Audio:" in out
 
 

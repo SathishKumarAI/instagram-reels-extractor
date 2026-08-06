@@ -17,7 +17,7 @@ import time
 from ..config import Config
 from ..models import Reel
 from ..observability import log
-from .vision import GENRES, _apply, _parse_json, _resolve_backend
+from .vision import GENRES, _apply, _parse_json, _resolve_backend, message_text
 
 MAX_CHARS = 12000  # cap the text sent to the model
 
@@ -51,6 +51,7 @@ def _via_cli(prompt: str, cfg: Config) -> tuple[dict, dict]:
     proc = subprocess.run(
         [claude, "-p", prompt, "--output-format", "json"],
         capture_output=True, text=True, timeout=180,
+        encoding="utf-8", errors="replace",   # cp1252 default cannot read our own captions
     )
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI failed: {proc.stderr.strip()[:200]}")
@@ -105,7 +106,9 @@ def _via_local(prompt: str, cfg: Config) -> tuple[dict, dict]:
     tokens = {"input": int(u.get("prompt_tokens", 0)), "cache_read": 0,
               "cache_creation": 0, "output": int(u.get("completion_tokens", 0)),
               "cost_usd": 0.0}
-    return _parse_json(p["choices"][0]["message"]["content"]), tokens
+    text, salvaged = message_text(p["choices"][0])
+    tokens["salvaged"] = salvaged
+    return _parse_json(text), tokens
 
 
 _TEXT_BACKENDS = {"claude-cli": _via_cli, "api": _via_api, "local": _via_local}

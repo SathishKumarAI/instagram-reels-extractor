@@ -40,14 +40,16 @@ function Metric({ label, a, b, better }: {
   );
 }
 
-function VariantCard({ v }: { v: Variant }) {
-  const Icon = ICON[v.backend] ?? Cloud;
+function VariantCard({ v, name }: { v: Variant; name: string }) {
+  // `v.backend` is "local" for every local model — the profile name is the only
+  // label that distinguishes qwen3vl-8b from minicpm-v45
+  const Icon = ICON[name] ?? (v.backend === "local" ? Cpu : Cloud);
   return (
     <Card>
       <CardContent className="space-y-3 pt-5">
         <div className="flex items-center gap-2">
           <Icon size={16} className="text-mauve" />
-          <span className="font-medium text-text">{v.backend}</span>
+          <span className="font-medium text-text">{name}</span>
           <span className="text-xs text-overlay0">{v.model}</span>
           <span className="ml-auto text-xs text-overlay0">
             {v.elapsed_s}s · {v.frames} frames
@@ -191,7 +193,7 @@ export default function ComparePage() {
           <Card className="mb-4">
             <CardContent className="pt-5">
               <div className="mb-2 flex justify-end gap-6 text-xs font-medium text-overlay0">
-                <span>{va.backend}</span><span>{vb.backend}</span>
+                <span>{names[0]}</span><span>{names[1]}</span>
               </div>
               <Metric label="facts" a={va.facts.length} b={vb.facts.length} better="high" />
               <Metric label="tags" a={va.tags.length} b={vb.tags.length} better="high" />
@@ -202,8 +204,8 @@ export default function ComparePage() {
             </CardContent>
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
-            <VariantCard v={va} />
-            <VariantCard v={vb} />
+            <VariantCard v={va} name={names[0]} />
+            <VariantCard v={vb} name={names[1]} />
           </div>
           <Diff result={result} />
         </>

@@ -43,7 +43,8 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="report only, change nothing")
     args = ap.parse_args()
 
-    files = subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split()
+    files = subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace").stdout.split()
     # untracked docs count too — they are about to be committed
     files += [str(p) for p in Path("docs").glob("*.md")] + ["STATUS.md", "CLAUDE.md"]
 

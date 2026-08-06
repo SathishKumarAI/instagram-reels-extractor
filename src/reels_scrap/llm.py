@@ -41,6 +41,7 @@ def _via_cli(prompt: str, timeout: int) -> str:
         proc = subprocess.run(
             [claude, "-p", prompt],
             capture_output=True, text=True, timeout=timeout,
+            encoding="utf-8", errors="replace",   # cp1252 default cannot read the reply
         )
     except subprocess.TimeoutExpired as e:
         raise LLMError(f"claude CLI timed out after {timeout}s") from e

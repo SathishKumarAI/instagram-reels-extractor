@@ -216,3 +216,16 @@ def test_bare_string_facts_are_kept_ungrounded(monkeypatch, tmp_path):
     assert [f.text for f in reel.facts] == ["five github repos for a homelab setup",
                                             "coolify is a self-hostable heroku alternative"]
     assert reel.facts[0].timestamp is None      # ungrounded, and honest about it
+
+
+def test_message_text_helper_covers_all_three_shapes():
+    """Every OpenAI-style reader goes through one helper, so a reasoning model
+    behaves the same in the vision call, the two-pass reader and the text call."""
+    ok = {"message": {"content": " {\"a\": 1} "}}
+    assert vision.message_text(ok) == ('{"a": 1}', False)
+
+    thinking = {"message": {"content": "", "reasoning": "draft"}, "finish_reason": "length"}
+    assert vision.message_text(thinking) == ("draft", True)
+
+    with pytest.raises(RuntimeError, match="max_tokens"):
+        vision.message_text({"message": {"content": None}, "finish_reason": "length"})

@@ -318,7 +318,8 @@ export default function ReelsPage() {
                       <div className="mt-2 flex flex-wrap gap-1">
                         {r.collections.map((c) => (
                           <span key={c} onClick={(e) => e.stopPropagation()}>
-                            <CollectionChip name={c} onClick={() => setCollection(c)} />
+                            {/* URL too, so the filtered grid is shareable and survives a reload */}
+                            <CollectionChip name={c} onClick={() => { setCollection(c); setParams({ collection: c }); }} />
                           </span>
                         ))}
                       </div>
