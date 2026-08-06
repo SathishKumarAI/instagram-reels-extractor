@@ -140,3 +140,44 @@ def test_scoreboard_counts_empty_and_salvaged_variants(cfg):
     row = next(b for b in scoreboard(cfg)["backends"] if b["backend"] == "thin")
     assert (row["reels"], row["empty"], row["salvaged"]) == (2, 1, 1)
     assert row["empty_rate"] == 0.5
+
+
+def test_frame_narration_does_not_hide_a_shared_claim():
+    """Local models narrate where they read a claim; Claude states it outright.
+
+    Scoring the narration made the same claim look like two, which penalised
+    exactly the models that follow our own "ground each fact in a frame" rule.
+    """
+    from reels_scrap.compare import _similar
+
+    a = "The reel demonstrates an 'ISOMETRIC HOLD OPEN STANCE' exercise with a weight plate"
+    b = "Frame 2 displays the on-screen text 'ISOMETRIC HOLD OPEN STANCE' as a training method."
+    assert _similar(a, b) >= 0.5
+
+
+def test_same_quoted_label_counts_as_the_same_claim():
+    from reels_scrap.compare import _similar
+
+    pairs = [
+        ("The second exercise is an 'RDL ISOMETRIC HOLD', hinging forward over a bench",
+         "Frame 3 shows the label 'RDL ISOMETRIC HOLD' for Romanian deadlifts."),
+        ('No. 1 is "Project Based Learning" at github.com/practical-tutorials',
+         "no. 1 PROJECT BASED LEARNING"),
+    ]
+    for a, b in pairs:
+        assert _similar(a, b) >= 0.5, (a, b)
+
+
+def test_unrelated_claims_still_score_zero():
+    from reels_scrap.compare import _similar
+
+    pairs = [
+        ("All three drills are static holds rather than repetition-based sets.",
+         "Viewers are instructed to comment 'Power' to receive a free power workout."),
+        ("The Microsoft curriculum runs 12 weeks over 24 lessons",
+         "Frame 1 shows a laptop on a wooden desk beside a coffee cup"),
+        ("The video recommends the book 'Atomic Habits' by James Clear",
+         "The presenter wears a black t-shirt in a home office"),
+    ]
+    for a, b in pairs:
+        assert _similar(a, b) < 0.5, (a, b)

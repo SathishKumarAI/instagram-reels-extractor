@@ -20,11 +20,44 @@ _WORD_RE = re.compile(r"[a-z0-9]+")
 _STOP = {
     "the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "and", "or",
     "in", "on", "at", "for", "with", "that", "this", "it", "as", "by", "from",
+    # Reporting boilerplate. Local models narrate where they read a claim —
+    # "Frame 2 displays the on-screen text 'ISOMETRIC HOLD'" — and Claude states it
+    # outright. Counting those words made the same claim look like two: measured
+    # 0.24 on a pair that is plainly identical. This is scoring the narration, not
+    # the claim, and it penalised exactly the models that follow our own
+    # "ground each fact in a frame" instruction.
+    "frame", "frames", "shows", "show", "showing", "shown", "displays", "display",
+    "displayed", "features", "featuring", "depicts", "contains", "indicates",
+    "indicating", "appears", "visible", "screen", "onscreen", "text", "image",
+    "video", "reel", "clip", "caption", "seen", "reads", "states", "says",
 }
+# "Frame 3:" / "In frame 3," / "Frame 3 shows that" — strip the pointer, keep the claim
+_FRAME_PREFIX = re.compile(
+    r"^(?:in\s+)?frames?\s*#?\d+\s*(?:\([^)]*\))?\s*[:,\-–]?\s*"
+    r"(?:the\s+)?(?:shows?|displays?|features?|depicts?|contains?)?\s*(?:that\s+)?",
+    re.I,
+)
 
 
 def _words(text: str) -> set[str]:
+    text = _FRAME_PREFIX.sub("", text.strip())
     return {w for w in _WORD_RE.findall(text.lower()) if w not in _STOP and len(w) > 2}
+
+
+# a quoted string, or a run of two-plus SHOUTED words — how both models render an
+# on-screen label they have both read
+_QUOTED = re.compile(r"[\"'“”‘’]([^\"'“”‘’]{6,80})[\"'“”‘’]")
+_SHOUTED = re.compile(r"\b([A-Z][A-Z0-9&/.-]{1,}(?:\s+[A-Z][A-Z0-9&/.-]{1,})+)\b")
+
+
+def _phrases(text: str) -> set[str]:
+    """Distinctive multi-word labels a claim quotes, normalised for comparison."""
+    out = set()
+    for m in list(_QUOTED.findall(text)) + list(_SHOUTED.findall(text)):
+        key = " ".join(w for w in _WORD_RE.findall(m.lower()) if len(w) > 2)
+        if key.count(" ") >= 1:          # single words are not distinctive enough
+            out.add(key)
+    return out
 
 
 def _similar(a: str, b: str) -> float:
@@ -36,9 +69,17 @@ def _similar(a: str, b: str) -> float:
     detail — Jaccard scores that 0.3 and calls it a disagreement. Containment (how
     much of the SHORTER claim appears in the longer one) catches it.
     """
+    # Two claims quoting the same on-screen label are the same claim, however
+    # differently they are dressed: `"RDL ISOMETRIC HOLD", hinging over a bench` vs
+    # `the label 'RDL ISOMETRIC HOLD' for Romanian deadlifts`. Word overlap alone
+    # scores that 0.23 because each side adds its own detail.
+    shared_phrase = _phrases(a) & _phrases(b)
+
     wa, wb = _words(a), _words(b)
     if not wa or not wb:
         return 1.0 if wa == wb else 0.0
+    if shared_phrase:
+        return 0.8
     inter = len(wa & wb)
     jaccard = inter / len(wa | wb)
     shorter = min(len(wa), len(wb))
