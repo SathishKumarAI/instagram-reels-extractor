@@ -282,11 +282,49 @@ def _apply(reel: Reel, data: dict) -> None:
     reel.facts = _dedupe_facts(facts)
 
 
+CAPTION_CHARS = 1200
+TRANSCRIPT_CHARS = 2500
+
+
+def _caption_for_prompt(caption: str) -> str:
+    """The caption, with its hashtags kept even when the body is trimmed.
+
+    Instagram captions end with their hashtags, so a head-only truncation removed
+    exactly the part that carries the sponsorship and topic markers — measured on
+    the bench sample: 11 of 30 captions ran past the old 500-char cut and 6 lost
+    their hashtags with it. Every model was then blamed for missing `#ad`.
+    """
+    caption = (caption or "").strip()
+    if not caption:
+        return "(none)"
+    if len(caption) <= CAPTION_CHARS:
+        return caption
+    tags = re.findall(r"#\w+", caption[CAPTION_CHARS:])
+    head = caption[:CAPTION_CHARS].rstrip()
+    return f"{head}… [trimmed]" + (f"\nHashtags: {' '.join(dict.fromkeys(tags))}" if tags else "")
+
+
 def _prompt_header(reel: Reel) -> str:
-    return (
-        f"These are frames sampled in order from a short Instagram reel.\n"
-        f"Caption: {reel.caption[:500] or '(none)'}\n\n{SCHEMA_INSTRUCTION}\n"
-    )
+    """What the model is told about the reel, besides the frames.
+
+    The transcript belongs here. The schema asks for facts grounded "in a frame or
+    in the spoken transcript", but the transcript was never sent — 527 of 674 reels
+    have one, and the model was being asked to ground claims in text it could not
+    see. Frames show what is written; the transcript is what is said, and for a
+    talking-head reel that is most of the substance.
+    """
+    parts = [
+        "These are frames sampled in order from a short Instagram reel.\n",
+        f"Caption: {_caption_for_prompt(reel.caption)}\n",
+    ]
+    spoken = (reel.transcript_text or "").strip()
+    if spoken:
+        parts.append(
+            f"\nWhat is said in the reel (transcript{', translated' if reel.transcript_translated else ''}):\n"
+            f"{spoken[:TRANSCRIPT_CHARS]}{'… [trimmed]' if len(spoken) > TRANSCRIPT_CHARS else ''}\n"
+        )
+    parts.append(f"\n{SCHEMA_INSTRUCTION}\n")
+    return "".join(parts)
 
 
 def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:

@@ -79,3 +79,26 @@ def test_without_a_transcript_nothing_is_stripped():
 
     lines = ["anything at all", "second line"]
     assert _strip_subtitles(lines, "") == lines
+
+
+def test_prompt_carries_the_transcript_and_keeps_hashtags():
+    """The schema asks for facts grounded in the spoken transcript, so the prompt
+    has to contain one. 527 of 674 reels had a transcript the model never saw."""
+    from reels_scrap.extract.vision import _prompt_header
+
+    r = Reel(id="X", url="https://ig/X",
+             caption="A long caption. " * 120 + " #manuspartner #ad",
+             transcript_text="I want to show you three repos I actually use.",
+             transcript_translated=True)
+    p = _prompt_header(r)
+    assert "three repos I actually use" in p          # what is said reaches the model
+    assert "translated" in p                          # and it is labelled honestly
+    assert "#manuspartner" in p and "#ad" in p        # tags survive a trimmed caption
+
+
+def test_prompt_without_a_transcript_says_nothing_about_one():
+    from reels_scrap.extract.vision import _prompt_header
+
+    p = _prompt_header(Reel(id="X", url="https://ig/X", caption="short one"))
+    assert "transcript" not in p.lower().split("spoken transcript")[0]
+    assert "Caption: short one" in p
