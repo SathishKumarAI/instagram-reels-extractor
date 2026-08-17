@@ -85,8 +85,13 @@ LOCAL_NUDGE = (
 
 def _frames_with_time(reel: Reel, cfg: Config):
     """Return [(idx, timestamp_sec, path)] subsampled to MAX_FRAMES."""
+    # the None check has to come FIRST: `data_dir / None` raises TypeError, so a
+    # reel with no video (image carousel, failed download) crashed the caller
+    # instead of returning "no frames"
+    if not reel.video_path:
+        return []
     video = cfg.data_dir / reel.video_path
-    if not reel.video_path or not video.exists():
+    if not video.exists():
         return []
     every = cfg.extract.frame_every_sec
     frames = sample_frames(

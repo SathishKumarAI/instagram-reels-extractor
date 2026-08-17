@@ -1,10 +1,12 @@
 """Enumerate a *named* Instagram saved collection into reel URLs.
 
-The built-in `saved` source only pulls the default "All Posts" saved feed.
-Named collections (e.g. .../saved/front-end/10000000000000004/) live behind a
-private web endpoint that needs your logged-in session. This module reuses the
-browser cookies you're already logged in with (via yt-dlp's cookie extractor,
-which handles Linux keyring decryption) — no password, no browser automation.
+Everything comes out of the default "All Posts" saved feed, which needs your
+logged-in session: this module reuses the browser cookies you're already logged
+in with (via yt-dlp's cookie extractor, which handles Linux keyring decryption)
+— no password, no browser automation. A NAMED collection (e.g.
+.../saved/front-end/10000000000000004/) is that same feed filtered on each
+item's `saved_collection_ids`; its own endpoint was retired by Instagram (see
+`fetch_collection`).
 
     from reels_scrap.ingest.collection import fetch_collection
     urls = fetch_collection("https://www.instagram.com/<u>/saved/<name>/<id>/")
@@ -183,14 +185,14 @@ def session_ok(browser: str = "chrome") -> tuple[bool, str]:
     return False, f"unexpected HTTP {r.status_code}"
 
 
-def _fetch_feed(
+def _fetch_items(
     feed_url: str,
     label: str,
     browser: str,
     limit: int,
     sleep_between: float,
-) -> list[str]:
-    """Page a private IG feed endpoint into de-duped reel URLs, newest first."""
+) -> list[dict]:
+    """Page a private IG feed endpoint into raw items, newest first."""
     import requests
 
     cookies = _ig_cookies(browser)
@@ -227,6 +229,11 @@ def _fetch_feed(
             break
         time.sleep(sleep_between)
 
+    return items[:limit]
+
+
+def _urls_from_items(items: list[dict], label: str, limit: int) -> list[str]:
+    """Raw feed items -> de-duped reel URLs, recording each poster's @handle."""
     urls: list[str] = []
     seen: set[str] = set()
     handles: dict[str, str] = {}
@@ -246,18 +253,62 @@ def _fetch_feed(
     return urls
 
 
+SAVED_FEED_URL = "https://www.instagram.com/api/v1/feed/saved/posts/"
+# how deep into the saved feed a collection lookup reads. A collection's members
+# are scattered through it, so a shallow scan silently reports a half-empty
+# collection. Paged 21 at a time — 1000 is ~48 requests, once per process.
+COLLECTION_SCAN = 1000
+
+_SAVED_SCAN: dict[str, tuple[float, int, list[dict]]] = {}   # browser -> (when, depth, items)
+# long enough to serve every source in one sync from one scan, short enough that
+# the long-lived API process re-reads the feed on the next run — a cache with no
+# expiry would make a newly saved reel invisible until the server restarts
+_SAVED_TTL_S = 600
+
+
+def _saved_items(browser: str, limit: int, sleep_between: float) -> list[dict]:
+    """The saved feed, paged once per sync and reused.
+
+    Nineteen collection sources in one sync would otherwise page the same feed
+    nineteen times, and Instagram 429s long before that finishes.
+    """
+    when, depth, items = _SAVED_SCAN.get(browser, (0.0, 0, []))
+    if depth < limit or time.time() - when > _SAVED_TTL_S:
+        items = _fetch_items(SAVED_FEED_URL, "saved/all", browser, limit, sleep_between)
+        _SAVED_SCAN[browser] = (time.time(), limit, items)
+    return items
+
+
 def fetch_collection(
     url_or_id: str,
     browser: str = "chrome",
     limit: int = 200,
     sleep_between: float = 1.5,
+    scan: int = COLLECTION_SCAN,
 ) -> list[str]:
-    """Return reel/post URLs in a NAMED saved collection (de-duped, in order)."""
+    """Return reel/post URLs in a NAMED saved collection (de-duped, in order).
+
+    Read out of the saved feed, not from a per-collection endpoint: as of
+    2026-08-17 `api/v1/feed/collection/{id}/posts/` returns Instagram's
+    logged-out HTML with HTTP 404 for every collection, while
+    `api/v1/feed/saved/posts/` returns 200 on the same cookies — the route is
+    gone, the session is fine. Every saved item carries `saved_collection_ids`,
+    so one feed answers all of them. `i.instagram.com` was tried too and fails
+    the same request with `status: fail`.
+
+    Consequence worth knowing: a collection can only be seen as deep as the feed
+    is scanned. Posts saved beyond `scan` are invisible here — they are already
+    ingested, so sync (which only wants what is new) does not care, but a
+    from-scratch rebuild of an old collection does.
+    """
     cid = collection_id(url_or_id)
-    return _fetch_feed(
-        f"https://www.instagram.com/api/v1/feed/collection/{cid}/posts/",
-        cid, browser, limit, sleep_between,
-    )
+    items = _saved_items(browser, max(scan, limit), sleep_between)
+    mine = [
+        it for it in items
+        if cid in {str(x) for x in (it.get("media", it).get("saved_collection_ids") or [])}
+    ]
+    log.info("collection %s: %d of %d saved posts", cid, len(mine), len(items))
+    return _urls_from_items(mine, cid, limit)
 
 
 def fetch_saved_feed(
@@ -270,7 +321,6 @@ def fetch_saved_feed(
     A reel saved without picking a collection lands only here — it appears in no
     named collection, so a collection-only sync never sees it.
     """
-    return _fetch_feed(
-        "https://www.instagram.com/api/v1/feed/saved/posts/",
-        "saved/all", browser, limit, sleep_between,
+    return _urls_from_items(
+        _saved_items(browser, limit, sleep_between), "saved/all", limit
     )

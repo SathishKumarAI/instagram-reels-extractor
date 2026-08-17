@@ -2,10 +2,37 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-05 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** Full sync ran green — **45 new reels**, corpus now **665**
-  (664 with summaries; the 1 gap is an image carousel, no video). Web UI + API
-  running locally: API `127.0.0.1:8000`, Vite dev `localhost:5173`.
+- **Last touched:** 2026-08-17 (on the **Windows** box, not the Rocky Linux one)
+- **Where I stopped:** Full sync green on all 20 sources — **75 new reels today**
+  (49 from the saved feed + 26 recovered from collections), corpus **674 → 749**.
+  API `127.0.0.1:8000` + Vite dev `localhost:5173` both up.
+- **Instagram retired the per-collection endpoint (2026-08-17).**
+  `api/v1/feed/collection/{id}/posts/` answers **404 with logged-out HTML** for
+  every collection, while `api/v1/feed/saved/posts/` returns 200 on the same
+  cookies and the collection page itself loads logged in — the route is gone, the
+  session is fine. `i.instagram.com` answers `status: fail`. 19 of 20 sources had
+  been failing since. **Fix: a collection is now the saved feed filtered on each
+  item's `saved_collection_ids`** (`ingest/collection.py`), one scan cached per
+  process (TTL 600s so the long-lived API server does not go blind to new saves)
+  serving all 19 — fewer requests than before. Ceiling: a collection is visible
+  only as deep as the scan (`COLLECTION_SCAN = 1000` saved posts).
+- **`_frames_with_time` crashed on a reel with no video:** `cfg.data_dir /
+  reel.video_path` ran before the `if not reel.video_path` guard, so an image
+  post raised `TypeError: … 'WindowsPath' and 'NoneType'` — it killed 7 of 49
+  reels in a compare batch. Guard runs first now; regression test added.
+- **Claude vs local on today's 49 new reels** (41 both arms did; the other 7 are
+  image posts Claude summarised from text, 1 lost to truncated local JSON):
+
+  | arm | facts | tags | summary | fields | empty | sec | $/reel | total |
+  |---|---|---|---|---|---|---|---|---|
+  | claude-cli (sonnet-4-6) | 7.78 | 5.54 | 850 | 3.56 | 0 | ~26 (wall) | $0.37 | **$15.27** |
+  | local (reels-vision) | 6.22 | 5.24 | 352 | 3.44 | 1 | 10.7 | $0 | **$0** |
+
+  Claim agreement 0.104 — local misses 6.5 claims/reel and adds 4.9 the reference
+  does not make. Structured coverage has closed since the 2026-08-06 bench
+  (3.44 vs 3.56, was 1.8 vs 4.0); facts and summary length are still the gap.
+  Sync does not time a single reel, so the Claude seconds are wall-clock/49 at
+  `vision_concurrency: 3`, not a per-reel measurement.
 - **Windows port — four things had to change:**
   1. `.venv` is a Linux venv (`/home/deva/...`) — created `.venv-win` (py3.12,
      `pip install -e ".[docs]"`). `web/node_modules` needed a fresh `npm install`.

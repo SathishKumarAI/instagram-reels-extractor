@@ -229,3 +229,11 @@ def test_message_text_helper_covers_all_three_shapes():
 
     with pytest.raises(RuntimeError, match="max_tokens"):
         vision.message_text({"message": {"content": None}, "finish_reason": "length"})
+
+
+def test_no_video_returns_no_frames_instead_of_crashing(tmp_path):
+    """An image carousel has no video_path. `data_dir / None` raised TypeError and
+    took the whole compare/bench run down with it — 7 of 49 reels in one batch."""
+    cfg = _cfg()
+    cfg.paths.data_dir = str(tmp_path)
+    assert vision._frames_with_time(Reel(id="X", url="u", video_path=None), cfg) == []
