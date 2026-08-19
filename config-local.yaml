@@ -45,7 +45,9 @@ extract:
   frame_every_sec: 2
   max_frames: 6          # parity with config.yaml (the Claude path)
   frame_max_width: 720   # parity — and matches the frames already cached on disk
-  vision_concurrency: 3          # 16GB VRAM, single user — keep the GPU busy between reels
+  # 1, not 3: three in-flight requests at 32k ctx multiply the KV cache and push a
+  # 9.4GB model off the 16GB card — every reel then read-timed out at 240s (2026-08-19)
+  vision_concurrency: 1
   vision_max_retries: 3
   vision_retry_backoff: 5.0
 

@@ -63,15 +63,42 @@ def ingest_cmd(config: str = typer.Option("config.yaml", "--config", "-c")):
 
 
 @app.command()
-def extract_cmd(config: str = typer.Option("config.yaml", "--config", "-c")):
-    """Re-run extraction on already-ingested reels."""
+def extract_cmd(
+    config: str = typer.Option("config.yaml", "--config", "-c"),
+    missing_vision: bool = typer.Option(
+        False, "--missing-vision",
+        help="only reels whose vision never landed (empty summary + frames on disk)",
+    ),
+):
+    """Re-run extraction on already-ingested reels.
+
+    `--missing-vision` is the repair pass for a run that died mid-vision: those
+    reels are downloaded, so `sync` no longer counts them as new and would never
+    revisit them — they stay summary-less until something looks.
+    """
     cfg = Config.load(config)
     from .extract import extract_all
+    from .modelreg import GpuContended
+    from .sources import local_gpu_blockers
 
     reels = _load_reels(cfg)
+    if missing_vision:
+        # no video means no frames to look at — a text/carousel record is empty
+        # for a reason, not for a lack of trying
+        reels = [r for r in reels if not r.summary and r.video_path]
+        console.print(f"{len(reels)} reel(s) with no summary")
+    busy = local_gpu_blockers(cfg)
+    for why in busy:
+        console.print(f"[red]gpu busy:[/] {why}")
+    if busy:
+        raise typer.Exit(3)
     for r in reels:
         console.print(f"• {r.id}")
-        extract_all(r, cfg)
+        try:
+            extract_all(r, cfg)
+        except GpuContended as e:
+            console.print(f"[red]gpu contended:[/] {e}")
+            raise typer.Exit(3) from e
 
 
 @app.command()
@@ -447,7 +474,17 @@ def sync(
         console.print(f"[cyan]vision backend[/] → {backend}"
                       + (f" ({cfg.extract.vision_local.model})" if backend == "local" else ""))
     from .ingest.collection import session_ok
-    from .sources import poll_all
+    from .sources import local_gpu_blockers, poll_all
+
+    # a busy GPU makes local vision time out on every reel (240s instead of ~8s)
+    # and dead-letter it — check before spending an Instagram request on anything
+    busy = local_gpu_blockers(cfg)
+    for why in busy:
+        console.print(f"[red]gpu busy:[/] {why}")
+    if busy:
+        console.print("[dim]sync is incremental — wait for the GPU and re-run, "
+                      "or REELS_IGNORE_GPU=1 to run anyway[/]")
+        raise typer.Exit(3)
 
     # probe once up front: an expired cookie fails all 20 sources identically, and
     # 20 identical errors hide the one-line real cause (re-export the cookie file)
@@ -460,9 +497,17 @@ def sync(
         console.print("[dim]every source will fail until this is fixed — "
                       "re-export cookies.txt (see docs/PRIVACY.md)[/]")
 
-    results = poll_all(cfg, config, sources_file=sources, browser=spec,
-                       build_docs=build_docs, retry_failed=retry_failed,
-                       only=only or None)
+    from .modelreg import GpuContended
+
+    try:
+        results = poll_all(cfg, config, sources_file=sources, browser=spec,
+                           build_docs=build_docs, retry_failed=retry_failed,
+                           only=only or None)
+    except GpuContended as e:
+        console.print(f"[red]gpu contended:[/] {e}")
+        console.print("[dim]what landed is saved — sync is incremental, "
+                      "re-run when the card is free[/]")
+        raise typer.Exit(3) from e
     if not results:
         console.print("[yellow]no enabled sources. Add one with `reels-scrap add-source <url>`.[/]")
         raise typer.Exit(1)

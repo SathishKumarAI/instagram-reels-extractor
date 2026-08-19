@@ -38,6 +38,10 @@ PYTHONUTF8=1 .venv-win/Scripts/python.exe -m reels_scrap.cli sync -c config-loca
 # one source only
 ... sync -c config-local.yaml --only saved-all
 
+# repair pass: reels whose vision failed (sync will never revisit them — they are
+# downloaded, so they are no longer "new", and --retry-failed only redoes ingest)
+... -m reels_scrap.cli extract-cmd -c config-local.yaml --missing-vision
+
 # API (127.0.0.1:8000) and web dev server (localhost:5173, proxies /api)
 ... -m reels_scrap.cli serve -c config.yaml --port 8000
 cd web && npm run dev
@@ -53,6 +57,14 @@ because the stock model's 4096 context rejects the frames we send. Rebuild after
 editing it: `ollama create reels-vision -f scripts/ollama-vision.Modelfile`.
 `LOCAL_NUDGE` in `extract/vision.py` applies only to the local backend — a 7B reads
 "3-8 facts" as "3". Do not add it to the Claude prompt.
+
+**The GPU is shared with your other repos.** Never start a local-vision run onto a
+busy card: ollama silently offloads layers to CPU and every reel then dies on the
+240s read timeout. `modelreg.gpu_blockers()` refuses to start (foreign model
+resident / free VRAM under `vram_gb` + 2GB / util ≥50%), and a failed call re-reads
+`ollama ps` — anything but `100% GPU` raises `GpuContended` and ends the run rather
+than retrying. `REELS_IGNORE_GPU=1` overrides both. Check with `ollama ps` and
+`nvidia-smi`; do not stop someone else's model to make room.
 
 ## Conventions
 - Heavy imports stay inside functions; a missing optional dep degrades one feature,

@@ -551,6 +551,18 @@ def _run_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict, str]:
             last = ex
             log.warning("%s: local vision attempt %d/%d failed: %s",
                         reel.id, attempt, e.vision_max_retries, ex)
+            # a failure is the moment to ask WHY: if something else took the card,
+            # ollama has silently put layers on CPU and every retry costs a full
+            # timeout to fail identically. One reel wasted, not the whole run.
+            from ..modelreg import GpuContended, processor_of
+
+            proc = processor_of(e.vision_local.model)
+            if proc and not proc.startswith("100%"):
+                raise GpuContended(
+                    f"{e.vision_local.model} is running {proc} — another job has the "
+                    f"GPU. Stopping: retries would each cost {e.vision_local.timeout:.0f}s "
+                    f"and fail the same way. Re-run when the card is free."
+                ) from ex
             if attempt < e.vision_max_retries:
                 time.sleep(e.vision_retry_backoff * (2 ** (attempt - 1)))
     if e.vision_local_fallback:

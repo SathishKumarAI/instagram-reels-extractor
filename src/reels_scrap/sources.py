@@ -38,6 +38,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .collections import Manifest, parse_collection_url, save_manifest, slugify
 from .config import Config
@@ -391,6 +392,23 @@ def poll_source(
     return res
 
 
+def local_gpu_blockers(cfg: Config) -> list[str]:
+    """Why this config's local-vision run should not start yet. Empty list = go.
+
+    Only meaningful when vision runs on THIS box's GPU — a remote endpoint's VRAM
+    is none of nvidia-smi's business here, so a non-local base_url skips the check.
+    """
+    e = cfg.extract
+    if not (e.vision and e.vision_backend == "local"):
+        return []
+    host = urlparse(e.vision_local.base_url).hostname or ""
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        return []
+    from .modelreg import gpu_blockers
+
+    return gpu_blockers(e.vision_local.model)
+
+
 def poll_all(
     cfg: Config,
     config_path: str,
@@ -408,6 +426,14 @@ def poll_all(
     `only` limits the run to sources whose name is in the list (still must be enabled).
     """
     from .docs import build_master_index
+
+    gpu_wait = local_gpu_blockers(cfg)
+    if gpu_wait:
+        raise RuntimeError(
+            "GPU is not free for local vision: " + "; ".join(gpu_wait)
+            + " — wait for that to finish and re-run (the sync is incremental, "
+              "nothing is lost), or set REELS_IGNORE_GPU=1 to run anyway"
+        )
 
     sources = [s for s in load_sources(sources_file) if s.enabled]
     if only:

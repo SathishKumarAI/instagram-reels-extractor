@@ -2,10 +2,34 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-17 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** Full sync green on all 20 sources — **75 new reels today**
-  (49 from the saved feed + 26 recovered from collections), corpus **674 → 749**.
-  API `127.0.0.1:8000` + Vite dev `localhost:5173` both up.
+- **Last touched:** 2026-08-19 (on the **Windows** box, not the Rocky Linux one)
+- **Where I stopped:** sync green, **0 new reels** — nothing new had been saved on
+  Instagram since 08-17. 11 ingest failures, all the permanent carousel class
+  (`No video formats found`). 4 reels still await vision; see the GPU guard below.
+- **The GPU is shared with your other projects, and that is what broke the sync.**
+  A local-vision run started onto a card already holding another repo's
+  `gemma4:12b`; ollama put 3 of 29 layers on CPU (`ollama ps` says
+  `17%/83% CPU/GPU`) and every reel died on the 240s read timeout — 40 minutes,
+  5 reels, 3 dead-lettered, nothing learned. Two guards now:
+  1. **Before the run** — `gpu_blockers()` (`modelreg.py`) refuses to start when a
+     foreign model is resident, free VRAM is under the model's `vram_gb` + 2GB KV
+     cache, or utilisation is ≥50%. `sync` exits 3 in under a second, before it
+     spends an Instagram request. `REELS_IGNORE_GPU=1` overrides.
+  2. **During the run** — a failed local call re-reads `ollama ps`; anything but
+     `100% GPU` raises `GpuContended`, which `with_retry(fatal=…)` refuses to
+     retry. One reel wasted instead of 9 attempts x 240s x every remaining reel.
+  A start-of-run check cannot see a job that starts later — that is exactly what
+  happened at 13:33 (`src.train --fold 0 --epochs 4` claimed the card mid-sync),
+  and it is why the second guard exists.
+- **`vision_concurrency` 3 → 1** in `config-local.yaml`: three in-flight requests
+  at 32k ctx multiply the KV cache off a 16GB card.
+- **A failed vision used to be invisible forever.** The reel is downloaded, so it
+  is no longer "new" and `sync` never revisits it; `--retry-failed` only re-attempts
+  *ingest* failures. `extract-cmd --missing-vision` is the repair pass (empty
+  summary + a video on disk). Measured: found the 4 leftovers first try.
+- **Local vision itself is healthy** — on a free card, `reels-vision` did
+  `DcOZQvgzHGG` at 6 facts / 5 tags / 302-char summary / 4 structured fields,
+  in line with the 08-06 bench. The timeouts were contention, never the model.
 - **Instagram retired the per-collection endpoint (2026-08-17).**
   `api/v1/feed/collection/{id}/posts/` answers **404 with logged-out HTML** for
   every collection, while `api/v1/feed/saved/posts/` returns 200 on the same
