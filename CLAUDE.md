@@ -66,6 +66,7 @@ editing it: `ollama create reels-vision -f scripts/ollama-vision.Modelfile`.
 | How its answer is **read** — JSON salvage, tags, fact hygiene | `extract/normalise.py` |
 | Which backend runs, retries, GPU bail-out, provenance | `extract/vision.py` |
 | An HTTP endpoint | `api/routes/<group>.py` — table in `api/README.md` |
+| A CLI command | `cli/<group>.py` — table in `cli/README.md` |
 | Why a measurement says what it says | `docs/research/` |
 
 Every directory with more than ~4 source files carries a `README.md` whose first
