@@ -1,19 +1,24 @@
-"""Structured visual extraction with provenance.
+"""Structured visual extraction with provenance — the backends and the run loop.
 
 Instead of a prose blurb, the model returns typed JSON: a genre, genre-specific
 fields, and a list of FACTS — each tied to the frame + timestamp it was read from.
 That makes the output queryable data and verifiable (scrub the reel to the second).
 
+This file owns frame selection, the four backends, retry/fallback and provenance.
+It does NOT own the prompt (`prompts.py`) or the reading of the answer
+(`normalise.py`) — both are re-exported below under their old private names so
+callers and tests keep working.
+
 Backends (extract.vision_backend):
   - "claude-cli": Claude Code CLI (`claude -p`). Subscription auth, NO API key. Default.
   - "api": Anthropic SDK + ANTHROPIC_API_KEY.
   - "local": self-hosted OpenAI-compatible vision endpoint (vLLM/Ollama on your own
-    GPU box, e.g. open-weights Kimi-VL). Frames stay on your LAN — no egress. On
-    failure it falls back to claude-cli (unless vision_local_fallback=false).
+    GPU box). Frames stay on your LAN — no egress. On failure it falls back to
+    claude-cli (unless vision_local_fallback=false).
 
-Every backend returns the SAME parsed-JSON shape via `_apply`, so genre/summary/
-tags/facts are schema-identical regardless of which model produced them. The reel's
-`tokens` dict carries `backend` + `model` provenance.
+Every backend returns the SAME parsed-JSON shape, so genre/summary/tags/facts are
+schema-identical regardless of which model produced them. The reel's `tokens` dict
+carries `backend` + `model` provenance.
 """
 
 from __future__ import annotations
@@ -21,66 +26,46 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import shutil
 import subprocess
 import time
 from datetime import UTC
 
 from ..config import Config
-from ..models import Fact, Reel
+from ..models import Reel
 from ..observability import log
 from .frames import sample_frames
+from .normalise import apply as _apply
+from .normalise import dedupe_facts as _dedupe_facts
+from .normalise import is_fragment as _is_fragment
+from .normalise import message_text
+from .normalise import norm_tags as _norm_tags
+from .normalise import parse_json as _parse_json
+from .normalise import strip_subtitles as _strip_subtitles
+from .normalise import unwrap_structured as _unwrap_structured
+from .prompts import (
+    CAPTION_CHARS,
+    GENRES,
+    LOCAL_NUDGE,
+    READ_PROMPT,
+    SCHEMA_INSTRUCTION,
+    TRANSCRIPT_CHARS,
+)
+from .prompts import caption_for_prompt as _caption_for_prompt
+from .prompts import prompt_header as _prompt_header
+
+# re-exports: these names moved to prompts.py / normalise.py in the 2026-08-20 split.
+# Listing them keeps `from .vision import _apply` (text_summary, tests, scripts)
+# working — one module is still the door to structured extraction.
+__all__ = [
+    "CAPTION_CHARS", "GENRES", "LOCAL_NUDGE", "READ_PROMPT", "SCHEMA_INSTRUCTION",
+    "TRANSCRIPT_CHARS", "_apply", "_caption_for_prompt", "_dedupe_facts",
+    "_is_fragment", "_norm_tags", "_parse_json", "_prompt_header", "_strip_subtitles",
+    "_unwrap_structured", "add_summary", "message_text", "run_variant",
+]
 
 MAX_FRAMES = 6  # default; overridden by cfg.extract.max_frames
 CLI_TIMEOUT = 240
-
-GENRES = ["tutorial", "product", "educational", "recipe", "news", "entertainment", "other"]
-
-SCHEMA_INSTRUCTION = (
-    "Return ONLY a single JSON object (no prose, no code fences) with this shape:\n"
-    "{\n"
-    '  "genre": one of ' + str(GENRES) + ",\n"
-    '  "summary": "3-5 sentences. What the reel actually teaches or claims — the '
-    "substance, not a description of the video. Name the specific tools, people, "
-    'numbers and steps involved.",\n'
-    '  "key_points": ["3-6 takeaways someone could act on, one line each"],\n'
-    '  "on_screen_text": ["title cards, labels, list items, prices, URLs and handles '
-    "rendered ON the video, quoted verbatim. NOT the subtitle/caption stream of what "
-    'is being said."],\n'
-    '  "tags": ["3-6 short lowercase topical tags for search/filter, e.g. '
-    '\\"machine-learning\\", \\"resume-tips\\", \\"open-source\\"],\n'
-    '  "structured": { genre-appropriate fields, FLAT (do not nest under the genre). '
-    'e.g. tutorial -> {"tools":[],"commands":[],"links":[],"steps":[]}; '
-    'product -> {"name":"","price":"","link":"","claims":[]}; '
-    'recipe -> {"ingredients":[],"steps":[],"time":""}; '
-    'educational -> {"topic":"","key_concepts":[],"resources":[]} },\n'
-    '  "facts": [ {"text":"one complete, self-contained claim", '
-    '"frame": <frame index int>, "timestamp": <seconds number>} ]\n'
-    "}\n"
-    "Rules: 3-8 facts. Every fact MUST be a COMPLETE statement that stands on its own "
-    "— never a sentence fragment copied from a moving subtitle line "
-    '(bad: "years now and", "so here are"; good: "The Microsoft Web-Dev-For-Beginners '
-    'curriculum runs 12 weeks over 24 lessons"). Ground each fact in a frame or in the '
-    "spoken transcript and set frame/timestamp accordingly. "
-    "Do NOT invent prices, names, or numbers you cannot read or hear."
-)
-
-
-# A 7B model treats "3-8 facts" as "3" and writes one-clause summaries, so the
-# local backend gets the floor spelled out. Not added to the Claude prompt — it
-# already fills the schema, and a shorter prompt is a cheaper prompt there.
-LOCAL_NUDGE = (
-    "\nIMPORTANT — every one of these fields is REQUIRED and must be non-empty:\n"
-    "- `summary`: at least 3 full sentences naming the specific tools, numbers and steps.\n"
-    "- `key_points`: at least 3 one-line takeaways someone could act on.\n"
-    "- `on_screen_text`: every title card, list item, label, price, URL or @handle you "
-    "can read in the frames, quoted verbatim. If a line only repeats what is spoken, "
-    "leave it out — that is a subtitle, not overlay text.\n"
-    "- `facts`: at least 6 (up to 8), each a COMPLETE sentence. Never a fragment.\n"
-    "- `tags`: at least 5.\n"
-    "- `structured`: filled with the genre-appropriate fields, flat.\n"
-)
 
 
 def _frames_with_time(reel: Reel, cfg: Config):
@@ -106,230 +91,24 @@ def _frames_with_time(reel: Reel, cfg: Config):
     return items
 
 
-def _parse_json(text: str) -> dict:
-    """Extract the best JSON object from model output, tolerant of fences/prose.
+def _image_content(items, url_style: bool) -> list[dict]:
+    """Frames as OpenAI/Anthropic message parts, each labelled with its timestamp.
 
-    A reasoning model's reply can hold several objects — a sketch, a correction,
-    then the answer. A greedy `\\{.*\\}` spans them all and json.loads reports
-    "Extra data"; taking the first gives you the sketch. So decode every object in
-    the text and keep the richest one, which is the finished answer.
+    One builder for both wire formats: they differ only in how an image is spelled
+    (`image_url` data-URI vs `image` + base64 source), and having written that twice
+    is how the two paths drifted apart before.
     """
-    text = (text or "").strip()
-    # strip ```json ... ``` fences if present
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fence:
-        text = fence.group(1)
-
-    decoder = json.JSONDecoder()
-    best: dict | None = None
-    i = text.find("{")
-    while i != -1:
-        try:
-            obj, end = decoder.raw_decode(text[i:])
-        except ValueError:
-            i = text.find("{", i + 1)
-            continue
-        if isinstance(obj, dict) and (best is None or len(obj) >= len(best)):
-            best = obj
-        i = text.find("{", i + end)
-    if best is None:
-        raise ValueError(f"no JSON object in model output: {text[:120]!r}")
-    return best
-
-
-def message_text(choice: dict) -> tuple[str, bool]:
-    """The text of one OpenAI-style choice, and whether it had to be salvaged.
-
-    A reasoning model (qwen3-vl and friends) puts its draft in `reasoning` and can
-    return an empty `content` when the budget runs out mid-thought. Indexing
-    `["content"]` blindly turns that into an AttributeError with no clue attached,
-    so every caller goes through here.
-    """
-    msg = (choice or {}).get("message", {}) or {}
-    text = (msg.get("content") or "").strip()
-    if text:
-        return text, False
-    salvaged = (msg.get("reasoning") or msg.get("reasoning_content") or "").strip()
-    if salvaged:
-        return salvaged, True
-    raise RuntimeError(
-        f"model returned no content (finish_reason={(choice or {}).get('finish_reason')!r})"
-        " — a reasoning model needs a larger max_tokens"
-    )
-
-
-def _norm_tags(raw) -> list[str]:
-    """Lowercase, hyphenate, de-dupe tags; drop empties. Cap at 8."""
-    out: list[str] = []
-    for t in raw or []:
-        s = re.sub(r"\s+", "-", str(t).strip().lower())
-        s = re.sub(r"[^a-z0-9-]", "", s).strip("-")
-        if s and s not in out:
-            out.append(s)
-    return out[:8]
-
-
-def _unwrap_structured(structured, genre: str) -> dict:
-    """Flatten `{"educational": {...}}` to `{...}`.
-
-    The schema shows `structured` holding genre-appropriate fields; Claude returns
-    them flat, local models often nest them under the genre name. Both are honest
-    readings of the prompt, so normalise instead of arguing — otherwise the record
-    looks like it has 1 field when it has 4, and every consumer has to special-case.
-    """
-    if not isinstance(structured, dict):
-        return {}
-    if len(structured) == 1:
-        (k, v), = structured.items()
-        if isinstance(v, dict) and (k == genre or k in GENRES):
-            return v
-    return structured
-
-
-_FRAGMENT_TAILS = (" and", " the", " a", " to", " of", " so", " but", " that", " with")
-# words a sliced caption tends to open on — a real claim opens on its subject
-_FRAGMENT_HEADS = {
-    "the", "a", "an", "and", "but", "so", "or", "of", "to", "that", "this", "these",
-    "those", "it", "its", "they", "them", "you", "your", "we", "our", "he", "she",
-    "his", "her", "in", "on", "at", "for", "with", "from", "by", "as", "if", "then",
-    "because", "when", "while", "which", "who", "what",
-}
-
-
-def _is_fragment(text: str) -> bool:
-    """True for a subtitle line caught mid-sentence rather than a real claim.
-
-    Sampling frames every ~8s slices a moving caption at arbitrary points, giving
-    "years now and", "clutch", "you'll ever". They are not claims and they poison
-    both search and any draft built from the corpus.
-    """
-    t = text.strip().rstrip(".")
-    words = t.split()
-    if len(words) < 4:
-        return True
-    if any(t.lower().endswith(tail) for tail in _FRAGMENT_TAILS):
-        return True   # trails off mid-sentence: "aspiring software engineer needs to"
-    # A slice that STARTS mid-sentence opens on a function word: "the only way you".
-    # Lower case alone is not the signal — several local models write every claim in
-    # lower case, and rejecting those counted the model as having found nothing when
-    # it had only failed to capitalise.
-    return words[0].lower() in _FRAGMENT_HEADS and t[:1].islower()
-
-
-def _dedupe_facts(facts: list[Fact]) -> list[Fact]:
-    """Drop repeats of the same claim read off several frames."""
-    out: list[Fact] = []
-    seen: list[set[str]] = []
-    for f in facts:
-        words = {w for w in re.findall(r"[a-z0-9]+", f.text.lower()) if len(w) > 2}
-        if any(words and s and len(words & s) / len(words | s) > 0.7 for s in seen):
-            continue
-        seen.append(words)
-        out.append(f)
-    return out
-
-
-def _strip_subtitles(lines: list[str], transcript: str) -> list[str]:
-    """Remove overlay lines that are really burned-in subtitles.
-
-    With the transcript in hand this is decidable rather than a guess: if the line
-    appears verbatim in what was said, it is the caption of the speech, not overlay
-    content. Keeps genuinely short overlays like "no. 1 PROJECT BASED LEARNING",
-    which a length rule would wrongly discard.
-    """
-    if not transcript:
-        return lines
-    spoken = re.sub(r"[^a-z0-9 ]", " ", transcript.lower())
-    spoken = re.sub(r"\s+", " ", spoken)
-    out = []
-    for line in lines:
-        norm = re.sub(r"[^a-z0-9 ]", " ", line.lower())
-        norm = re.sub(r"\s+", " ", norm).strip()
-        if norm and len(norm.split()) >= 2 and norm in spoken:
-            continue
-        out.append(line)
-    return out
-
-
-def _apply(reel: Reel, data: dict) -> None:
-    reel.genre = str(data.get("genre", "") or "")
-    reel.summary = str(data.get("summary", "") or "")
-    reel.key_points = [str(k).strip() for k in (data.get("key_points") or []) if str(k).strip()][:8]
-    reel.on_screen_text = _strip_subtitles(
-        [str(s).strip() for s in (data.get("on_screen_text") or []) if str(s).strip()],
-        reel.transcript_text or "",
-    )[:20]
-    reel.tags = _norm_tags(data.get("tags"))
-    reel.structured = _unwrap_structured(data.get("structured"), reel.genre)
-    facts = []
-    for f in data.get("facts", []) or []:
-        # smaller models answer `"facts": ["…", "…"]` — a claim without its frame.
-        # Dropping those silently would count a model as having found nothing when
-        # it only failed to ground what it found.
-        if isinstance(f, str):
-            f = {"text": f}
-        if not isinstance(f, dict) or not f.get("text"):
-            continue
-        if _is_fragment(str(f["text"])):
-            log.debug("%s: dropped fragment fact %r", reel.id, f["text"])
-            continue
-        facts.append(
-            Fact(
-                text=str(f["text"]),
-                frame=f.get("frame") if isinstance(f.get("frame"), int) else None,
-                timestamp=(
-                    float(f["timestamp"])
-                    if isinstance(f.get("timestamp"), (int, float))
-                    else None
-                ),
-            )
+    content: list[dict] = []
+    for i, t, p in items:
+        content.append({"type": "text", "text": f"Frame {i} at {t}s:"})
+        b64 = base64.standard_b64encode(p.read_bytes()).decode()
+        content.append(
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+            if url_style else
+            {"type": "image",
+             "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}}
         )
-    reel.facts = _dedupe_facts(facts)
-
-
-CAPTION_CHARS = 1200
-TRANSCRIPT_CHARS = 2500
-
-
-def _caption_for_prompt(caption: str) -> str:
-    """The caption, with its hashtags kept even when the body is trimmed.
-
-    Instagram captions end with their hashtags, so a head-only truncation removed
-    exactly the part that carries the sponsorship and topic markers — measured on
-    the bench sample: 11 of 30 captions ran past the old 500-char cut and 6 lost
-    their hashtags with it. Every model was then blamed for missing `#ad`.
-    """
-    caption = (caption or "").strip()
-    if not caption:
-        return "(none)"
-    if len(caption) <= CAPTION_CHARS:
-        return caption
-    tags = re.findall(r"#\w+", caption[CAPTION_CHARS:])
-    head = caption[:CAPTION_CHARS].rstrip()
-    return f"{head}… [trimmed]" + (f"\nHashtags: {' '.join(dict.fromkeys(tags))}" if tags else "")
-
-
-def _prompt_header(reel: Reel) -> str:
-    """What the model is told about the reel, besides the frames.
-
-    The transcript belongs here. The schema asks for facts grounded "in a frame or
-    in the spoken transcript", but the transcript was never sent — 527 of 674 reels
-    have one, and the model was being asked to ground claims in text it could not
-    see. Frames show what is written; the transcript is what is said, and for a
-    talking-head reel that is most of the substance.
-    """
-    parts = [
-        "These are frames sampled in order from a short Instagram reel.\n",
-        f"Caption: {_caption_for_prompt(reel.caption)}\n",
-    ]
-    spoken = (reel.transcript_text or "").strip()
-    if spoken:
-        parts.append(
-            f"\nWhat is said in the reel (transcript{', translated' if reel.transcript_translated else ''}):\n"
-            f"{spoken[:TRANSCRIPT_CHARS]}{'… [trimmed]' if len(spoken) > TRANSCRIPT_CHARS else ''}\n"
-        )
-    parts.append(f"\n{SCHEMA_INSTRUCTION}\n")
-    return "".join(parts)
+    return content
 
 
 def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
@@ -385,14 +164,7 @@ def _via_api(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
         raise RuntimeError("ANTHROPIC_API_KEY not set; use vision_backend=claude-cli")
     import anthropic
 
-    content: list[dict] = []
-    for i, t, p in items:
-        content.append({"type": "text", "text": f"Frame {i} at {t}s:"})
-        data = base64.standard_b64encode(p.read_bytes()).decode()
-        content.append(
-            {"type": "image",
-             "source": {"type": "base64", "media_type": "image/jpeg", "data": data}}
-        )
+    content = _image_content(items, url_style=False)
     content.append({"type": "text", "text": _prompt_header(reel)})
     client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
@@ -408,12 +180,8 @@ def _via_api(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     return _parse_json("".join(b.text for b in msg.content if b.type == "text")), tokens
 
 
-def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
-    """Self-hosted OpenAI-compatible vision endpoint (vLLM/Ollama/Kimi-VL).
-
-    POSTs frames as base64 data-URI images to {base_url}/chat/completions. Runs on
-    your own GPU box — no data egress. Returns (parsed JSON, token usage).
-    """
+def _post_local(cfg: Config, content: list[dict]) -> dict:
+    """One call to the local OpenAI-compatible endpoint. Returns the raw payload."""
     import requests
 
     lc = cfg.extract.vision_local
@@ -422,30 +190,33 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
             "vision_local.base_url is empty — set your OpenAI-compatible endpoint "
             "(e.g. http://gpu-box:8000/v1)"
         )
-    content: list[dict] = []
-    for i, t, p in items:
-        content.append({"type": "text", "text": f"Frame {i} at {t}s:"})
-        b64 = base64.standard_b64encode(p.read_bytes()).decode()
-        content.append(
-            {"type": "image_url",
-             "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
-        )
-    content.append({"type": "text", "text": _prompt_header(reel) + LOCAL_NUDGE})
-
-    url = lc.base_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
     if lc.api_key:
         headers["Authorization"] = f"Bearer {lc.api_key}"
-    body = {
-        "model": lc.model,
-        "messages": [{"role": "user", "content": content}],
-        "max_tokens": lc.max_tokens,
-        "temperature": 0,   # deterministic → repeatable results per reel
-    }
-    resp = requests.post(url, json=body, headers=headers, timeout=lc.timeout)
+    resp = requests.post(
+        lc.base_url.rstrip("/") + "/chat/completions",
+        json={
+            "model": lc.model,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": lc.max_tokens,
+            "temperature": 0,   # deterministic → repeatable results per reel
+        },
+        headers=headers, timeout=lc.timeout,
+    )
     if resp.status_code != 200:
         raise RuntimeError(f"local vision HTTP {resp.status_code}: {resp.text[:200]}")
-    payload = resp.json()
+    return resp.json()
+
+
+def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
+    """Self-hosted OpenAI-compatible vision endpoint (vLLM/Ollama).
+
+    POSTs frames as base64 data-URI images. Runs on your own GPU box — no data
+    egress. Returns (parsed JSON, token usage).
+    """
+    content = _image_content(items, url_style=True)
+    content.append({"type": "text", "text": _prompt_header(reel) + LOCAL_NUDGE})
+    payload = _post_local(cfg, content)
     choice = payload["choices"][0]
     text, salvaged = message_text(choice)
     u = payload.get("usage", {}) or {}
@@ -463,15 +234,6 @@ def _via_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     return _parse_json(text), tokens   # _parse_json raises on malformed → triggers fallback
 
 
-READ_PROMPT = (
-    "Read these frames from a short video, in order. For EACH frame output one line:\n"
-    "`Frame <i> (<t>s): <every piece of text visible in that frame, verbatim>` — then, "
-    "after a `|`, a short description of what is happening in the image.\n"
-    "Transcribe text exactly as written, including numbers, handles, URLs and prices. "
-    "Write `(no text)` when a frame has none. Output nothing else."
-)
-
-
 def _via_local_2pass(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     """Read-then-structure. Pass 1 asks the VLM only to transcribe the frames;
     pass 2 is a text-only call that turns those readings into the schema.
@@ -479,29 +241,9 @@ def _via_local_2pass(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     Splitting the job stops a 7B from having to see and reason at once — and pass 2
     cannot invent what it never saw, because it only gets pass 1's text.
     """
-    import requests
-
-    lc = cfg.extract.vision_local
-    content: list[dict] = []
-    for i, t, p in items:
-        content.append({"type": "text", "text": f"Frame {i} at {t}s:"})
-        b64 = base64.standard_b64encode(p.read_bytes()).decode()
-        content.append({"type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+    content = _image_content(items, url_style=True)
     content.append({"type": "text", "text": READ_PROMPT})
-
-    headers = {"Content-Type": "application/json"}
-    if lc.api_key:
-        headers["Authorization"] = f"Bearer {lc.api_key}"
-    r = requests.post(
-        lc.base_url.rstrip("/") + "/chat/completions",
-        json={"model": lc.model, "messages": [{"role": "user", "content": content}],
-              "max_tokens": lc.max_tokens, "temperature": 0},
-        headers=headers, timeout=lc.timeout,
-    )
-    if r.status_code != 200:
-        raise RuntimeError(f"local read pass HTTP {r.status_code}: {r.text[:200]}")
-    p1 = r.json()
+    p1 = _post_local(cfg, content)
     readings, _ = message_text(p1["choices"][0])
     u1 = p1.get("usage", {}) or {}
     log.info("%s: [local/pass1] read %d chars from %d frames", reel.id, len(readings), len(items))
@@ -542,9 +284,11 @@ def _run_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict, str]:
     (data, tokens, backend_used)."""
     e = cfg.extract
     last: Exception | None = None
-    run = _via_local_2pass if e.vision_local_two_pass else _via_local
     for attempt in range(1, e.vision_max_retries + 1):
         try:
+            # looked up per attempt, not hoisted: the tests (and the bench) monkeypatch
+            # `vision._via_local`, and a hoisted reference would miss the patch
+            run = _via_local_2pass if e.vision_local_two_pass else _via_local
             data, tokens = run(reel, cfg, items)
             return data, tokens, "local"
         except Exception as ex:
@@ -573,6 +317,24 @@ def _run_local(reel: Reel, cfg: Config, items) -> tuple[dict, dict, str]:
     raise RuntimeError(f"local vision failed and fallback disabled: {last}") from last
 
 
+def _extract(reel: Reel, cfg: Config, backend: str, items) -> tuple[dict, dict, str]:
+    """Run one backend over `items`. Returns (data, tokens-with-provenance, used)."""
+    b = _resolve_backend(backend)
+    if b == "local":
+        data, tokens, used = _run_local(reel, cfg, items)
+    else:
+        data, tokens = _BACKENDS[b](reel, cfg, items)
+        used = b
+    tokens = dict(tokens or {})
+    tokens["backend"] = used   # provenance: which model actually produced this record
+    # "local->claude-cli" is a fallback that ran on Claude — name Claude, not the
+    # local model that failed
+    tokens["model"] = (
+        cfg.extract.vision_local.model if used == "local" else cfg.extract.vision_model
+    )
+    return data, tokens, used
+
+
 def run_variant(reel: Reel, cfg: Config, backend: str) -> dict:
     """Summarise `reel` with ONE named backend and return the result as a variant.
 
@@ -584,23 +346,13 @@ def run_variant(reel: Reel, cfg: Config, backend: str) -> dict:
     items = _frames_with_time(reel, cfg)
     if not items:
         raise RuntimeError(f"{reel.id}: no frames (missing video?)")
-    b = _resolve_backend(backend)
     t0 = time.time()
-    if b == "local":
-        data, tokens, used = _run_local(reel, cfg, items)
-    else:
-        data, tokens = _BACKENDS[b](reel, cfg, items)
-        used = b
+    data, tokens, used = _extract(reel, cfg, backend, items)
     elapsed = round(time.time() - t0, 2)
 
     # reuse _apply's normalisation by running it on a throwaway copy
     probe = reel.model_copy(deep=True)
     _apply(probe, data)
-    tokens = dict(tokens or {})
-    tokens["backend"] = used
-    tokens["model"] = (
-        cfg.extract.vision_local.model if used == "local" else cfg.extract.vision_model
-    )
     log.info("%s: [variant/%s] %d facts, %d tags in %.1fs",
              reel.id, used, len(probe.facts), len(probe.tags), elapsed)
     return {
@@ -626,17 +378,8 @@ def add_summary(reel: Reel, cfg: Config) -> Reel:
         return reel
     backend = _resolve_backend(cfg.extract.vision_backend)
     log.info("%s: structured vision via %s (%d frames)", reel.id, backend, len(items))
-    if backend == "local":
-        data, tokens, used = _run_local(reel, cfg, items)
-    else:
-        data, tokens = _BACKENDS[backend](reel, cfg, items)
-        used = backend
+    data, tokens, used = _extract(reel, cfg, backend, items)
     _apply(reel, data)
-    tokens = dict(tokens or {})
-    tokens["backend"] = used   # provenance: which model actually produced this reel
-    tokens["model"] = (
-        cfg.extract.vision_local.model if used == "local" else cfg.extract.vision_model
-    )
     reel.tokens = tokens
     log.info(
         "%s: [%s] genre=%s, %d facts, %d tags, tokens in/out=%s/%s",
