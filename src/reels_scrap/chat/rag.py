@@ -26,6 +26,7 @@ class Citation(BaseModel):
     score: float
     snippet: str
     timestamp: float | None = None
+    collections: list[str] = []   # which shelf the citation came off (M7)
 
 
 class Answer(BaseModel):
@@ -57,6 +58,9 @@ def answer_question(
     ]
 
     # one citation per reel (best-scoring match), preserving rank order
+    from ..collections import reels_by_collection
+
+    by_collection = reels_by_collection(cfg.output_dir)
     citations: list[Citation] = []
     seen_cite: set[str] = set()
     for m in matches:
@@ -67,6 +71,7 @@ def answer_question(
             Citation(
                 reel_id=m["reel_id"], title=m["title"], url=m["url"],
                 score=m["score"], snippet=m["text"][:300], timestamp=m.get("timestamp"),
+                collections=by_collection.get(m["reel_id"], []),
             )
         )
 

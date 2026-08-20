@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, type ReelDetail, type ReelSummary } from "@/lib/api";
+import { api, type ReelDetail, type ReelSummary, type VariantsDiff } from "@/lib/api";
 import { ExternalLink, Hash, Quote, Search } from "lucide-react";
 import { CollectionChip } from "@/components/TagChip";
 import { ModelBadge } from "@/components/ModelBadge";
@@ -259,6 +259,9 @@ function Paper({ id }: { id: string }) {
         </Sec>
       )}
 
+      {/* what a second model said about the same reel — from disk, not a new run */}
+      <ModelDiff key={r.id} id={r.id} />
+
       {/* every link, consistently surfaced */}
       {links.length > 0 && (
         <Sec label="Links">
@@ -274,6 +277,87 @@ function Paper({ id }: { id: string }) {
         </Sec>
       )}
     </article>
+  );
+}
+
+// Inline local-vs-cloud diff. Reads stored variants only — the Compare tab is
+// where you pay to run a model; here you just see what the other arm already said.
+function ModelDiff({ id }: { id: string }) {
+  const [d, setD] = useState<VariantsDiff | null>(null);
+  const [pair, setPair] = useState<{ a: string; b: string } | null>(null);
+
+  useEffect(() => {
+    setD(null);
+    api.variantsDiff(id, pair?.a, pair?.b).then(setD).catch(() => setD(null));
+  }, [id, pair]);
+
+  if (!d || d.available.length < 2 || !d.diff.shared) return null;
+  const { only_a = [], only_b = [], shared = [] } = d.diff;
+  const va = d.variants[d.a];
+  const vb = d.variants[d.b];
+  const pick = (which: "a" | "b") => (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setPair(which === "a" ? { a: e.target.value, b: d.b } : { a: d.a, b: e.target.value });
+  const sel = "rounded border border-surface0 bg-base px-1.5 py-0.5 font-sans text-xs text-text";
+  const meta = (v: typeof va) =>
+    v ? `${v.facts.length} claims · ${v.elapsed_s ? `${v.elapsed_s.toFixed(1)}s` : "—"} · ${v.cost_usd ? `$${v.cost_usd.toFixed(2)}` : "$0"}` : "";
+
+  return (
+    <Sec label="Model diff">
+      <div className="mb-3 flex flex-wrap items-center gap-2 font-sans text-xs text-overlay0">
+        <select value={d.a} onChange={pick("a")} className={sel}>
+          {d.available.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <span>{meta(va)}</span>
+        <span className="text-overlay0">vs</span>
+        <select value={d.b} onChange={pick("b")} className={sel}>
+          {d.available.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <span>{meta(vb)}</span>
+        <span className="ml-auto">
+          {shared.length} shared · {only_a.length} only {d.a} · {only_b.length} only {d.b}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 font-sans text-sm">
+        <Claims title={`Only ${d.a}`} colour="text-mauve" items={only_a} />
+        <Claims title={`Only ${d.b}`} colour="text-peach" items={only_b} />
+      </div>
+
+      {shared.length > 0 && (
+        <details className="mt-3 font-sans text-sm">
+          <summary className="cursor-pointer text-xs uppercase tracking-wide text-overlay0">
+            {shared.length} claims both models make
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {shared.map((s, i) => (
+              <li key={i} className="rounded border border-surface0/60 p-2 text-subtext">
+                <div>{s.a}</div>
+                <div className="mt-1 text-overlay0">{s.b}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Sec>
+  );
+}
+
+function Claims({ title, colour, items }: { title: string; colour: string; items: string[] }) {
+  return (
+    <div>
+      <h3 className={`mb-1.5 text-xs font-semibold uppercase tracking-wide ${colour}`}>
+        {title} <span className="text-overlay0">({items.length})</span>
+      </h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-overlay0">nothing the other model missed</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((t, i) => (
+            <li key={i} className="leading-snug text-subtext">· {t}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

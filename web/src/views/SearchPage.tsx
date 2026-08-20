@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type SearchHit } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { CollectionChip } from "@/components/TagChip";
 import { Search as SearchIcon } from "lucide-react";
 
 export default function SearchPage() {
@@ -43,15 +44,26 @@ export default function SearchPage() {
 
       <div className="max-w-2xl space-y-2">
         {hits.map((h, i) => (
-          <button key={i} onClick={() => nav(`/reels?focus=${h.reel_id}`)}
-            className="block w-full rounded-lg border border-surface0 p-3 text-left hover:border-mauve">
-            <div className="mb-1 flex items-center gap-2">
+          // a div, not a button: the collection chips inside are buttons themselves
+          <div key={i} role="button" tabIndex={0}
+            onClick={() => nav(`/reels?focus=${h.reel_id}`)}
+            onKeyDown={(e) => e.key === "Enter" && nav(`/reels?focus=${h.reel_id}`)}
+            className="block w-full cursor-pointer rounded-lg border border-surface0 p-3 text-left hover:border-mauve">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
               <Badge variant="genre">{h.kind}{h.timestamp != null ? ` @${Math.round(h.timestamp)}s` : ""}</Badge>
               <span className="font-medium text-text">{h.title}</span>
+              {/* which shelf the hit came off — same colour as everywhere else */}
+              {(h.collections ?? []).map((c) => (
+                <CollectionChip
+                  key={c}
+                  name={c}
+                  onClick={(e) => { e.stopPropagation(); nav(`/reels?collection=${encodeURIComponent(c)}`); }}
+                />
+              ))}
               <span className="ml-auto text-xs text-overlay0">{h.score.toFixed(2)}</span>
             </div>
             <p className="line-clamp-2 text-sm text-subtext">{h.text}</p>
-          </button>
+          </div>
         ))}
       </div>
     </div>

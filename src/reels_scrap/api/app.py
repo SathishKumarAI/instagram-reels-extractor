@@ -148,6 +148,34 @@ def _reels(cfg: Config) -> list[Reel]:
     return [Reel.load(p) for p in sorted(cfg.data_dir.glob("*.json"))]
 
 
+def _hits(cfg: Config, rows: list[dict]) -> list[SearchHit]:
+    """Search rows + the collections each hit's reel sits on.
+
+    A hit answers "where did you read this"; the shelf is half that answer, and
+    the grid, the reader and the table all already say it.
+    """
+    from ..collections import reels_by_collection
+
+    by_reel = reels_by_collection(cfg.output_dir)
+    return [SearchHit(**h, collections=by_reel.get(h["reel_id"], [])) for h in rows]
+
+
+def _variant_meta(name: str, v: dict) -> dict:
+    """The parts of a stored variant the reader draws. Claim text only, no frames."""
+    return {
+        "name": name,
+        "backend": v.get("backend", ""),
+        "model": v.get("model", ""),
+        "summary": v.get("summary", ""),
+        "tags": v.get("tags") or [],
+        "structured": v.get("structured") or {},
+        "facts": [f.get("text", "") for f in (v.get("facts") or [])],
+        "elapsed_s": v.get("elapsed_s"),
+        "cost_usd": float((v.get("tokens") or {}).get("cost_usd") or 0),
+        "created_at": v.get("created_at", ""),
+    }
+
+
 def _summary(r: Reel) -> ReelSummary:
     return ReelSummary(
         id=r.id, title=r.title or r.id, author=r.author, genre=r.genre, tags=r.tags, url=r.url,
@@ -515,6 +543,38 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
         d["annotation"] = load_annotations(cfg.output_dir).get(reel_id, {})
         return d
 
+    @app.get("/api/reels/{reel_id}/variants/diff")
+    def variants_diff(reel_id: str, a: str = "", b: str = "") -> dict:
+        """Diff two variants **already stored** on the reel. Read-only, $0, instant.
+
+        `POST /api/reels/{id}/compare` re-runs the models; this does not. 641 of the
+        674 reels already carry both a Claude and a local arm, so the reader wants
+        the difference, not another 30 seconds and another $0.34. With no `a`/`b`,
+        picks the reference arm plus whatever else is stored.
+        """
+        from ..compare import diff_facts
+
+        p = cfg.data_dir / f"{_safe_id(reel_id)}.json"
+        if not p.exists():
+            raise HTTPException(404, f"no reel {reel_id}")
+        variants = Reel.load(p).variants or {}
+        names = sorted(variants)
+        if a not in variants:
+            a = "claude-cli" if "claude-cli" in variants else (names[0] if names else "")
+        if b not in variants or b == a:
+            b = next((n for n in names if n != a), "")
+        out = {
+            "reel_id": reel_id, "available": names, "a": a, "b": b,
+            "variants": {n: _variant_meta(n, variants[n]) for n in (a, b) if n},
+            "diff": {},
+        }
+        if a and b:
+            out["diff"] = {
+                "a": a, "b": b,
+                **diff_facts(variants[a].get("facts", []), variants[b].get("facts", [])),
+            }
+        return out
+
     @app.get("/api/reels/{reel_id}/similar")
     def similar(reel_id: str, k: int = 6) -> list[SearchHit]:
         """'More like this' — semantic neighbours via the existing embedding index."""
@@ -529,7 +589,7 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             hits = [h for h in do_search(cfg, query, k + 3) if h["reel_id"] != reel_id]
         except FileNotFoundError:
             return []
-        return [SearchHit(**h) for h in hits[:k]]
+        return _hits(cfg, hits[:k])
 
     @app.get("/api/sources")
     def list_sources_ep() -> list[dict]:
@@ -825,7 +885,7 @@ def create_app(config_path: str = "config.yaml") -> FastAPI:
             hits = do_search(cfg, q, k)
         except FileNotFoundError as e:
             raise HTTPException(409, "no search index — run extraction first") from e
-        return [SearchHit(**h) for h in hits]
+        return _hits(cfg, hits)
 
     @app.post("/api/chat", response_model=Answer)
     def chat(req: ChatRequest) -> Answer:
