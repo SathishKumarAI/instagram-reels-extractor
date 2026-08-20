@@ -49,7 +49,12 @@ SCHEMA_INSTRUCTION = (
     '(bad: "years now and", "so here are"; good: "The Microsoft Web-Dev-For-Beginners '
     'curriculum runs 12 weeks over 24 lessons"). Ground each fact in a frame or in the '
     "spoken transcript and set frame/timestamp accordingly. "
-    "Do NOT invent prices, names, or numbers you cannot read or hear."
+    "Do NOT invent prices, names, or numbers you cannot read or hear.\n"
+    "The CAPTION is evidence, not decoration. Copy every identifier it states — URLs, "
+    "@handles, repo/tool names, promo codes, prices, and sponsorship markers (#ad, "
+    "#sponsored, 'paid partnership') — VERBATIM into `structured.links` (for URLs and "
+    "@handles) or into a fact. Never paraphrase or shorten an identifier, and never "
+    "drop a sponsorship marker: who paid for the reel is part of what it claims."
 )
 
 
@@ -62,7 +67,8 @@ LOCAL_NUDGE = (
     "leave it out — that is a subtitle, not overlay text.\n"
     "- `facts`: at least 6 (up to 8), each a COMPLETE sentence. Never a fragment.\n"
     "- `tags`: at least 5.\n"
-    "- `structured`: filled with the genre-appropriate fields, flat.\n"
+    "- `structured`: filled with the genre-appropriate fields, flat, PLUS `links`: "
+    "every URL and @handle from the caption, copied character for character.\n"
 )
 
 

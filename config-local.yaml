@@ -35,7 +35,11 @@ extract:
     model: "reels-vision"
     api_key: ""
     timeout: 240        # 6 frames at 720px on a 7B q8 — slower than the 4x512 default
-    max_tokens: 1500    # room for the full 3-8 facts the schema asks for
+    # 4000, not 1500: a reel with a long caption ran the budget out mid-`summary`
+    # and every retry failed identically ("no JSON object in model output") —
+    # measured 2026-08-20, 1 of 12 reels in the caption ablation. The bench arms
+    # were raised to 8000 for the same reason; sync was never updated.
+    max_tokens: 4000
   vision_local_fallback: false   # STRICT LOCAL — never egress to Claude. Failed reels dead-letter; retry with `sync --retry-failed`
   whisper_model: large-v3
   whisper_device: auto
