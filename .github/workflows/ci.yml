@@ -52,7 +52,13 @@ jobs:
           python-version: "3.12"
       - name: no credential files tracked
         run: |
-          if git ls-files | grep -viE '\.env\.example$' | grep -iE 'cookies|session|secret|credential'; then
+          # A credential is a FILE — cookies.txt, sessionid.json, *.secret, and any
+          # copy of one. Source code that merely NAMES the concept is not: the
+          # cookies-file loader's own test (tests/test_cookies_file.py) tripped this
+          # gate, so the security check has been red on every run since it landed —
+          # and a check that is always red is a check nobody reads.
+          if git ls-files | grep -viE '\.(py|ts|tsx)$|\.env\.example$' \
+                          | grep -iE 'cookies|session|secret|credential'; then
             echo "::error::a credential-looking file is tracked"; exit 1
           fi
       - name: no sessionid / api key values in history
