@@ -93,6 +93,9 @@ Preview the site: `mkdocs serve -f output/site_src/mkdocs.yml`.
 ## CLI
 
 ```bash
+reels-scrap collection URL     # saved collection → fetch + extract + build a self-contained
+                               #   HTML doc (thumbnails embedded, links back) + open it
+reels-scrap consolidate        # rebuild every collection doc + index from already-extracted data
 reels-scrap run                # full pipeline (ingest → extract → structure → render → index)
 reels-scrap fetch-collection U # enumerate a named saved collection → reels.txt (browser cookies)
 reels-scrap ingest-cmd         # download only
@@ -129,6 +132,29 @@ reels-scrap serve                        # serves API + UI on one port
 Architecture, scaling (~100 reels/hr), and Docker deploy are documented in
 `docs/ARCHITECTURE.md`, `docs/SCALING.md`, `docs/DEPLOY.md`. Rebuild-from-scratch
 prompt templates live in `prompts/`.
+
+## Which model reads your reels
+
+Vision extraction runs on **any** of eight models — Claude, or seven open-weights
+models on your own GPU — and every record says which one wrote it. The models are
+listed in `models.yaml`, installed with `reels-scrap models pull <name>`, and
+compared head to head on a fixed sample with `reels-scrap bench`.
+
+| Read this | For |
+|---|---|
+| [`docs/research/README.md`](docs/research/README.md) | the research project: method, phases, and the prompt behind every build step |
+| [`docs/research/MODELS.md`](docs/research/MODELS.md) | what each model is, how it reads a reel, and the knobs that change the answer |
+| [`docs/research/UI-TABS.md`](docs/research/UI-TABS.md) | what every tab does and the gotcha in each |
+| [`docs/research/COSTS.md`](docs/research/COSTS.md) | where every cost figure comes from, and what "free" means |
+| `docs/research/BENCH-*.md` | the measured comparison, and why the models differ |
+
+```bash
+reels-scrap models list                    # installed vs available
+reels-scrap models pull qwen3vl-8b         # pull + rebuild at 32k context
+reels-scrap bench sample -n 30 --seed 0    # one fixed, stratified sample
+reels-scrap bench run --profile qwen3vl-8b # resumable, one model at a time
+reels-scrap bench report                   # metrics + why they differ
+```
 
 ## Docker
 

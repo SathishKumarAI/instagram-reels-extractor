@@ -1,0 +1,24 @@
+# Conda env for reels-scrap — CPU / no-GPU by default (this machine: Intel iGPU only).
+#
+# Two-track design:
+#   • .venv  (venv, lean)  → fetch / sync / dedup / doc build / serve. No torch.
+#   • conda  (this file)   → adds transcript (faster-whisper, CTranslate2 — NO torch)
+#                            and AI vision (claude-cli — NO torch). CPU-friendly.
+#
+# On-screen OCR (easyocr) pulls torch+torchvision (multi-GB) and is DEFERRED here —
+# see scripts/install-extraction.sh for the CPU-only torch wheel install when needed.
+#
+#   mamba env create -f environment.yml     # or: conda env create -f environment.yml
+#   conda activate reels-scrap
+#   pip install -e ".[cpu]"                  # transcript+vision+pdf+docs+dev, torch-free
+#   # later, if you want OCR on this CPU box:
+#   bash scripts/install-extraction.sh       # installs CPU torch wheels + easyocr
+name: reels-scrap
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - ffmpeg          # audio decode for whisper + frame sampling (binary, not pip)
+  - pip:
+      - -e .[cpu]   # torch-free extraction stack (see pyproject [cpu] extra)

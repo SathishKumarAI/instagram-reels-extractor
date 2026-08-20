@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Config
@@ -33,7 +33,7 @@ def _post_to_reel(post) -> Reel:
         url=f"https://www.instagram.com/reel/{rid}/",
         author=post.owner_username,
         title=(caption.splitlines()[0][:120] if caption else rid),
-        timestamp=post.date_utc.replace(tzinfo=timezone.utc),
+        timestamp=post.date_utc.replace(tzinfo=UTC),
         caption=caption,
         hashtags=HASHTAG_RE.findall(caption),
         mentions=MENTION_RE.findall(caption),
@@ -42,7 +42,7 @@ def _post_to_reel(post) -> Reel:
         views=getattr(post, "video_view_count", None),
         duration=getattr(post, "video_duration", None),
         video_path=f"{rid}.mp4",
-        scraped_at=datetime.now(tz=timezone.utc),
+        scraped_at=datetime.now(tz=UTC),
     )
 
 
@@ -68,13 +68,13 @@ def _build_loader(cfg: Config):
         try:
             L.load_session_from_file(cfg.source.username)
             print(f"  ✓ loaded session for {cfg.source.username}")
-        except FileNotFoundError:
+        except FileNotFoundError as _e:
             raise SystemExit(
                 f"\nNo saved Instagram session for {cfg.source.username!r}.\n"
                 f"Create one locally (password/2FA stays on your machine):\n"
                 f"  instaloader --login {cfg.source.username}\n"
                 f"then re-run. Passwords are NEVER read from config or this code.\n"
-            )
+            ) from _e
     return L
 
 
@@ -140,7 +140,7 @@ def ingest_instaloader(
                 wait = backoff * (2 ** (attempt - 1))
                 print(f"  ⚠ conn error ({e}); retry in {wait:.0f}s (attempt {attempt})")
                 time.sleep(wait)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 print(f"  ! failed {post.shortcode}: {e}")
                 break
         else:

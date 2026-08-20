@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
-SOURCE_TYPES = {"urls", "profile", "hashtag", "saved"}
+SOURCE_TYPES = {"urls", "profile", "hashtag", "saved", "rss", "arxiv", "github"}
 WHISPER_MODELS = {"tiny", "base", "small", "medium", "large-v2", "large-v3"}
 WHISPER_DEVICES = {"auto", "cpu", "cuda"}
 
@@ -37,6 +37,47 @@ class SourceCfg(BaseModel):
         return self
 
 
+class VisionLocalCfg(BaseModel):
+    """Self-hosted, OpenAI-compatible vision endpoint (vLLM / Ollama / any /v1).
+
+    Used when extract.vision_backend == "local". Runs on your own GPU box on the
+    LAN — frames never leave your network. Default model is the open-weights
+    Kimi-VL (moonshotai/Kimi-VL-A3B-Instruct), a compact multimodal VLM.
+    """
+
+    base_url: str = ""       # e.g. http://gpu-box:8000/v1  (empty until you wire the box)
+    model: str = "moonshotai/Kimi-VL-A3B-Instruct"
+    api_key: str = ""        # optional; vLLM usually needs none, Ollama none
+    timeout: float = Field(default=120.0, ge=5)
+    # ceiling is generous because a reasoning model (qwen3-vl) spends output tokens
+    # thinking before it answers — measured: 4000 was still short on hard reels
+    max_tokens: int = Field(default=900, ge=64, le=16384)
+
+
+class VisionProfileCfg(BaseModel):
+    """One named model the bench (or a sync) can run.
+
+    A profile is what `vision_backend` could not be: several local models coexist,
+    each with its own endpoint and context, and each writes its own named variant
+    on a reel instead of overwriting the last one.
+    """
+
+    kind: str = "local"          # local | claude-cli | api
+    model: str = ""              # ollama tag or claude model id
+    base_url: str = ""           # local only; empty -> inherit extract.vision_local
+    api_key: str = ""
+    num_ctx: int = Field(default=32768, ge=2048)   # frames+prompt overflow small contexts
+    max_tokens: int = Field(default=1500, ge=64, le=8192)
+    timeout: float = Field(default=300.0, ge=5)
+    notes: str = ""              # why this model is in the set — the research value
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.kind not in {"local", "claude-cli", "api"}:
+            raise ValueError("vision_profiles.*.kind must be 'local', 'claude-cli' or 'api'")
+        return self
+
+
 class ExtractCfg(BaseModel):
     caption: bool = True
     transcript: bool = True
@@ -44,10 +85,44 @@ class ExtractCfg(BaseModel):
     vision: bool = False
     whisper_model: str = "base"
     whisper_device: str = "auto"
-    whisper_language: str = ""   # "" = auto-detect; set "en" to force English
+    whisper_language: str = ""   # "" = auto-detect; set e.g. "en" to force a source language
+    # Non-English reels: Whisper's built-in "translate" task emits clean English
+    # regardless of the spoken language (auto-detected). ON by default so a Hindi/
+    # Tamil/etc. reel yields readable English instead of a forced-English garble.
+    # For English audio it's a near-identity transcription. Set false to keep the
+    # raw source-language transcript verbatim.
+    whisper_translate: bool = True
+    # GPU batching: 12.6x realtime vs 1.6x sequential (RTX 5070 Ti, large-v3).
+    # Ignored on CPU, where the plain model is used.
+    whisper_batch_size: int = Field(default=8, ge=1, le=32)
     vision_model: str = "claude-sonnet-4-6"
-    vision_backend: str = "claude-cli"   # claude-cli (subscription, no key) | api
+    # auto (api if ANTHROPIC_API_KEY else claude-cli) | claude-cli | api | local
+    vision_backend: str = "auto"
+    vision_local: VisionLocalCfg = Field(default_factory=VisionLocalCfg)
+    # Named models the bench can run, e.g. {"qwen3vl-8b": {kind: local, model: …}}.
+    # Empty is fine: `claude-cli`, `api` and `local` resolve without being declared.
+    vision_profiles: dict[str, VisionProfileCfg] = Field(default_factory=dict)
+    # When a "local" vision call fails (endpoint down / malformed JSON after retries),
+    # fall back to claude-cli so every reel still gets extracted. NOTE: fallback frames
+    # DO leave the machine (egress to Claude). Set false for strict local-only.
+    vision_local_fallback: bool = True
+    # Two-pass local extraction: pass 1 the VLM transcribes what is on screen,
+    # pass 2 a text-only call turns those readings into the JSON schema.
+    #
+    # MEASURED over 15 reels (2026-08-04), same frames, both local:
+    #   1-pass  facts 5.53  tags 5.20  summary 217 chars  fields 1.87  5.74s
+    #   2-pass  facts 6.47  tags 5.07  summary 187 chars  fields 1.27  7.13s
+    # More facts, but shorter summaries, fewer structured fields and 24% slower.
+    # Off by default; turn on when facts-per-reel is what you are optimising.
+    vision_local_two_pass: bool = False
     frame_every_sec: int = Field(default=2, ge=1, le=30)
+    # Frames sent to vision. Fewer = faster + cheaper (esp. via claude-cli, where each
+    # frame is an agentic Read turn). 6 is a good quality/cost balance; 4 for speed.
+    max_frames: int = Field(default=6, ge=1, le=16)
+    # Downscale sampled frames to this max width (px). Image tokens scale with pixel
+    # count, so 720 from a 1080-wide reel ≈ 2-3× fewer tokens with negligible quality
+    # loss for genre/summary. 0 = keep native resolution.
+    frame_max_width: int = Field(default=720, ge=0, le=1920)
     ocr_min_confidence: float = Field(default=0.45, ge=0, le=1)  # drop low-conf OCR junk
     # Scaling knobs: the vision LLM is the throughput bottleneck. Parallel
     # `claude -p` calls throttle (3-way already fails), so vision is gated to a
@@ -62,8 +137,13 @@ class ExtractCfg(BaseModel):
             raise ValueError(f"extract.whisper_model must be one of {sorted(WHISPER_MODELS)}")
         if self.whisper_device not in WHISPER_DEVICES:
             raise ValueError(f"extract.whisper_device must be one of {sorted(WHISPER_DEVICES)}")
-        if self.vision_backend not in {"claude-cli", "api"}:
-            raise ValueError("extract.vision_backend must be 'claude-cli' or 'api'")
+        if self.vision_backend not in {"auto", "claude-cli", "api", "local"}:
+            raise ValueError("extract.vision_backend must be 'auto', 'claude-cli', 'api' or 'local'")
+        if self.vision_backend == "local" and not self.vision_local.base_url:
+            raise ValueError(
+                "extract.vision_backend='local' requires extract.vision_local.base_url "
+                "(your OpenAI-compatible GPU endpoint, e.g. http://gpu-box:8000/v1)"
+            )
         return self
 
 
@@ -120,8 +200,8 @@ class Config(BaseModel):
     paths: PathsCfg = PathsCfg()
 
     @classmethod
-    def load(cls, path: str | Path) -> "Config":
-        raw = yaml.safe_load(Path(path).read_text()) or {}
+    def load(cls, path: str | Path) -> Config:
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         return cls.model_validate(raw)
 
     @property

@@ -11,7 +11,6 @@ instantly and only rebuilds when reels change.
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from pathlib import Path
 
@@ -95,7 +94,7 @@ def build_knowledge(cfg: Config, max_facts_per_topic: int = 40) -> Knowledge:
         )
 
     kb = Knowledge(total_reels=len(reels), topics=topics)
-    knowledge_path(cfg).write_text(kb.model_dump_json(indent=2))
+    knowledge_path(cfg).write_text(kb.model_dump_json(indent=2), encoding="utf-8")
     log.info("knowledge: %d topics over %d reels", len(topics), len(reels))
     return kb
 
@@ -105,4 +104,4 @@ def load_knowledge(cfg: Config, rebuild: bool = False) -> Knowledge:
     p = knowledge_path(cfg)
     if rebuild or not p.exists():
         return build_knowledge(cfg)
-    return Knowledge.model_validate_json(p.read_text())
+    return Knowledge.model_validate_json(p.read_text(encoding="utf-8"))

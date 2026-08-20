@@ -5,8 +5,23 @@ output/
 session-*
 .cache/
 
+# PRIVATE: personal saved-collection registry, reel URL lists, run state, media.
+# These identify the user's private Instagram collections and content — never commit.
+# Version-control sources.example.json instead (no personal ids).
+sources.json
+sources_state.json
+reels.txt
+reels-*.txt
+reels_*.txt
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.webp
+
 # python
 .venv/
+.venv-win/
 __pycache__/
 *.pyc
 *.egg-info/
@@ -19,6 +34,10 @@ dist/
 cookies.txt
 *.cookies
 cookies*.txt
+# a copy of a secret is still a secret — backups/exports of the above
+cookies*.bak
+*.txt.bak
+*.bak
 
 # whisper/easyocr model caches
 .models/

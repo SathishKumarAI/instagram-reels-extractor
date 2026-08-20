@@ -18,7 +18,7 @@ def ffmpeg_bin() -> str:
         import imageio_ffmpeg
 
         return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise RuntimeError(
             "ffmpeg not found. Install via `pip install imageio-ffmpeg` or `./setup.sh`."
         ) from e
@@ -28,16 +28,31 @@ def ensure_ffmpeg() -> None:
     ffmpeg_bin()  # raises if unavailable
 
 
-def sample_frames(video: Path, out_dir: Path, every_sec: int = 2) -> list[Path]:
-    """Extract 1 frame every `every_sec` seconds. Returns sorted frame paths."""
+def sample_frames(video: Path, out_dir: Path, every_sec: int = 2,
+                  force: bool = False, max_width: int = 0) -> list[Path]:
+    """Extract 1 frame every `every_sec` seconds. Returns sorted frame paths.
+
+    Cached: if frames were already sampled into out_dir, reuse them (skip ffmpeg)
+    unless force=True. Big speed win on re-extract/backfill runs.
+
+    `max_width` > 0 downscales frames to that width (keeping aspect) — fewer pixels
+    means fewer vision image tokens, at negligible quality cost for genre/summary.
+    """
     ensure_ffmpeg()
     out_dir.mkdir(parents=True, exist_ok=True)
+    cached = sorted(out_dir.glob("frame_*.jpg"))
+    if cached and not force:
+        return cached
     pattern = out_dir / "frame_%04d.jpg"
     fps = f"1/{max(1, every_sec)}"
+    vf = f"fps={fps}"
+    if max_width and max_width > 0:
+        # scale down only if wider than max_width; -2 keeps even height + aspect
+        vf += f",scale='min({max_width},iw)':-2"
     cmd = [
         ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-y",
         "-i", str(video),
-        "-vf", f"fps={fps}",
+        "-vf", vf,
         "-q:v", "3",
         str(pattern),
     ]
@@ -55,7 +70,8 @@ def has_audio_stream(video: Path) -> bool:
     ensure_ffmpeg()
     # ffmpeg has no probe-only mode; -i to a null muxer prints stream info to stderr.
     cmd = [ffmpeg_bin(), "-hide_banner", "-i", str(video)]
-    out = subprocess.run(cmd, capture_output=True, text=True).stderr
+    out = subprocess.run(cmd, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace").stderr
     return "Audio:" in out
 
 

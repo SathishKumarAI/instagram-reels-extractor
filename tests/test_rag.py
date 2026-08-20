@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import reels_scrap.chat.rag as rag
+from reels_scrap.chat import rag
 from reels_scrap.llm import LLMError
 
 HITS = [

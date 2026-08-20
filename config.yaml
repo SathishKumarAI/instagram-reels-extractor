@@ -10,19 +10,24 @@ source:
 auth:                   # PRIVATE reel access (your account / accounts you follow)
   cookies_from_browser: "chrome"   # firefox | chrome | brave | edge — must be logged into IG
   cookies_file: ""           # OR path to exported cookies.txt
-  browser_profile: ""        # optional named browser profile
+  browser_profile: "Default"        # optional named browser profile
 
 extract:
   caption: true         # caption + hashtags + mentions + stats (free, from metadata)
-  transcript: true      # spoken audio -> text via faster-whisper (local)
-  ocr: true             # on-screen text via easyocr on sampled frames
-  vision: true          # AI visual summary (clean text for visual/text reels)
-  vision_backend: claude-cli   # claude-cli (your subscription, no key) | api
-  whisper_model: base   # tiny | base | small | medium | large-v3
+  # Transcript is ON as of 2026-08-04: 89.5% of the corpus had no spoken text
+  # captured at all, which was the single biggest cause of vague summaries.
+  transcript: true      # GPU whisper large-v3, ~12x realtime batched
+  ocr: false            # OFF — was easyocr+torch (local CPU). Set true to re-enable.
+  vision: true          # AI visual summary via claude — reads on-screen text too
+  vision_backend: claude-cli  # claude code only (no API key, no local ML). auto|claude-cli|api
+  whisper_model: large-v3   # tiny | base | small | medium | large-v3
   whisper_device: auto  # auto | cpu | cuda
-  whisper_language: en  # "" = auto-detect; "en" forces English (less hallucination)
+  whisper_language: ""  # "" = auto-detect source language; set "en" to force a language
+  whisper_translate: true  # translate non-English speech to clean English (auto-detect source)
   vision_model: claude-sonnet-4-6   # claude-opus-4-8 for max quality
   frame_every_sec: 2    # sample 1 frame every N seconds for OCR/vision
+  max_frames: 6         # token reduction: cap frames sent to vision
+  frame_max_width: 720  # token reduction: downscale frames before vision (0 = native)
   vision_concurrency: 1     # parallel claude vision calls (3+ throttles; keep 1-2)
   vision_max_retries: 3     # retry a throttled/failed vision call this many times
   vision_retry_backoff: 5.0 # seconds, exponential (5,10,20…) between vision retries

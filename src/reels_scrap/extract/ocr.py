@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import threading
+
 from ..config import Config
 from ..models import Reel
 from .frames import sample_frames
-
-import threading
 
 _READER = None
 _READER_LOCK = threading.Lock()

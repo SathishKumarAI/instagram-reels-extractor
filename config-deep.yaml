@@ -1,0 +1,46 @@
+# Deep-extraction config: transcript + on-screen OCR + AI vision (genre/summary/
+# key-facts). Run with the CONDA env (torch/whisper/easyocr). No PDF/mkdocs so it
+# doesn't need weasyprint/mkdocs — the consolidated doc renderer reads the JSON.
+source:
+  type: urls
+  urls_file: reels-phd.txt
+  target: ""
+  login: false
+  username: ""
+  limit: 200
+  resume: true          # videos already on disk → skip re-download, just extract
+
+auth:
+  cookies_from_browser: "chrome"
+  cookies_file: ""
+  browser_profile: "Default"
+
+extract:
+  caption: true
+  transcript: true      # faster-whisper (CTranslate2) — spoken audio → text. CPU, no torch.
+  ocr: false            # easyocr needs torch — DEFERRED (no GPU). `pip install -e .[ocr]` later.
+  vision: true          # claude-cli → genre + summary + structured + key facts. No torch.
+  vision_backend: auto      # api if ANTHROPIC_API_KEY set (cheap+parallel) else claude-cli
+  whisper_model: base
+  whisper_device: auto
+  whisper_language: ""      # auto-detect
+  whisper_translate: true   # non-English speech → clean English
+  vision_model: claude-sonnet-4-6
+  frame_every_sec: 2
+  max_frames: 6             # token reduction: cap frames (quality-balanced)
+  frame_max_width: 720      # token reduction: downscale frames before vision
+  vision_concurrency: 1     # parallel claude calls throttle; keep 1
+  vision_max_retries: 3
+  vision_retry_backoff: 5.0
+
+batch:
+  workers: 2            # transcript+OCR parallel; vision gated to concurrency=1
+
+output:
+  pdf: false            # weasyprint not installed
+  docs_site: false      # mkdocs not installed
+  combined_pdf: false
+
+paths:
+  data_dir: data
+  output_dir: output

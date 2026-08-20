@@ -1,0 +1,64 @@
+# LOCAL-GPU mode: vision runs on YOUR OWN GPU box via an OpenAI-compatible
+# endpoint (vLLM/Ollama serving open-weights Kimi-VL). Frames never leave your
+# LAN — no egress. Same genre/summary/tags/facts/tokens output as the Claude
+# path. On failure it falls back to claude-cli (set vision_local_fallback:false
+# for strict local-only). See docs/LOCAL-VISION.md for serving setup.
+#
+# Switch anytime:  reels-scrap sync -c config-local.yaml
+#            or:   reels-scrap sync --backend local     (with base_url set in any config)
+source:
+  type: urls
+  urls_file: reels-phd.txt
+  target: ""
+  login: false
+  username: ""
+  limit: 200
+  resume: true
+
+auth:
+  cookies_from_browser: "chrome"
+  cookies_file: "cookies.txt"
+  browser_profile: "Default"
+
+extract:
+  caption: true
+  transcript: true
+  ocr: false
+  vision: true
+  vision_backend: local          # <-- the switch: use the local GPU endpoint
+  vision_local:
+    # this machine: Ollama on the RTX 5070 Ti. Point at a remote box instead by
+    # swapping the host (e.g. http://gpu-box:8000/v1 for vLLM).
+    base_url: "http://127.0.0.1:11434/v1"
+    # qwen2.5vl:7b with num_ctx raised to 16k — see scripts/ollama-vision.Modelfile
+    # (stock 4096 ctx rejects 4 frames + prompt)
+    model: "reels-vision"
+    api_key: ""
+    timeout: 240        # 6 frames at 720px on a 7B q8 — slower than the 4x512 default
+    max_tokens: 1500    # room for the full 3-8 facts the schema asks for
+  vision_local_fallback: false   # STRICT LOCAL — never egress to Claude. Failed reels dead-letter; retry with `sync --retry-failed`
+  whisper_model: large-v3
+  whisper_device: auto
+  whisper_language: ""
+  whisper_translate: true
+  vision_model: claude-sonnet-4-6   # used only for the fallback path
+  frame_every_sec: 2
+  max_frames: 6          # parity with config.yaml (the Claude path)
+  frame_max_width: 720   # parity — and matches the frames already cached on disk
+  # 1, not 3: three in-flight requests at 32k ctx multiply the KV cache and push a
+  # 9.4GB model off the 16GB card — every reel then read-timed out at 240s (2026-08-19)
+  vision_concurrency: 1
+  vision_max_retries: 3
+  vision_retry_backoff: 5.0
+
+batch:
+  workers: 4
+
+output:
+  pdf: false
+  docs_site: false
+  combined_pdf: false
+
+paths:
+  data_dir: data
+  output_dir: output

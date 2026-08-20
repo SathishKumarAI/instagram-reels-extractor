@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Blocks credentials and personal Instagram data from ever entering a commit.
+# Enable once per clone:  git config core.hooksPath .githooks
+#
+# .gitignore already covers the known names; this catches the cases it cannot —
+# a renamed export (`ig-cookies-2026.txt.old`), a pasted sessionid inside a doc,
+# or a `git add -f` that overrides the ignore rule.
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+fail() { echo "pre-commit BLOCKED: $1" >&2; exit 1; }
+
+# 1. filenames that are credentials or personal registries
+echo "$staged" | grep -qiE '(^|/)(cookies|sources)\.(txt|json)$|\.cookies$|(^|/)\.env$|session.*\.json$' \
+  && fail "staged a credential/personal file. Commit sources.example.json instead."
+
+# 2. credential-shaped VALUES in staged content (IG sessionid is <digits>%3A<token>)
+if git diff --cached -U0 | grep -qE '^\+.*[0-9]{6,}%3A[A-Za-z0-9_-]{10,}'; then
+  fail "an Instagram sessionid value appears in the staged diff."
+fi
+if git diff --cached -U0 | grep -qE '^\+.*(sk-ant-[A-Za-z0-9-]{20,}|ANTHROPIC_API_KEY=[^\s"]{10,})'; then
+  fail "an Anthropic API key appears in the staged diff."
+fi
+
+# 3. media/personal corpus (gitignored, so only reachable via `git add -f`)
+echo "$staged" | grep -qiE '^(data|output)/|\.(mp4|jpg|jpeg|png|webp)$' \
+  && fail "staged reel media or run output. These are private — keep them out of git."
+
+exit 0

@@ -1,15 +1,83 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { BookOpen, Clapperboard, MessagesSquare } from "lucide-react";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Activity, ArrowLeft, Compass, Scale as ScaleIcon, BookOpen, Clapperboard, Home, KanbanSquare, Link2, MessagesSquare, Palette, ScrollText, Search, Table2, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { THEME_OPTIONS, type ThemeMode, loadTheme, saveTheme } from "@/lib/theme";
+import HomePage from "./views/HomePage";
+import KanbanPage from "./views/KanbanPage";
 import KnowledgePage from "./views/KnowledgePage";
+import ReaderPage from "./views/ReaderPage";
 import ReelsPage from "./views/ReelsPage";
 import ResearchChat from "./views/ResearchChat";
+import SearchPage from "./views/SearchPage";
+import SourcesPage from "./views/SourcesPage";
+import ComparePage from "./views/ComparePage";
+import DiscoverPage from "./views/DiscoverPage";
+import SyncPage from "./views/SyncPage";
+import TablePage from "./views/TablePage";
+import TagsPage from "./views/TagsPage";
 
 const nav = [
-  { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+  { to: "/home", label: "Overview", icon: Home },
+  { to: "/search", label: "Search", icon: Search },
   { to: "/reels", label: "Reels", icon: Clapperboard },
+  { to: "/reader", label: "Reader", icon: ScrollText },
+  { to: "/table", label: "Table", icon: Table2 },
+  { to: "/board", label: "Board", icon: KanbanSquare },
+  { to: "/tags", label: "Tags", icon: Tag },
+  { to: "/knowledge", label: "Knowledge", icon: BookOpen },
+  { to: "/discover", label: "Discover", icon: Compass },
+  { to: "/sources", label: "Sources", icon: Link2 },
+  { to: "/sync", label: "Sync", icon: Activity },
+  { to: "/compare", label: "Compare", icon: ScaleIcon },
   { to: "/research", label: "Research", icon: MessagesSquare },
 ];
+
+function ThemeSwitcher() {
+  const [theme, setTheme] = useState<ThemeMode>(() => loadTheme());
+  return (
+    <div className="mt-auto pt-4">
+      <label className="mb-1 flex items-center gap-2 px-2 text-xs text-overlay0">
+        <Palette size={13} /> Theme
+      </label>
+      <select
+        value={theme}
+        onChange={(e) => { const t = e.target.value as ThemeMode; setTheme(t); saveTheme(t); }}
+        className="w-full rounded-lg border border-surface0 bg-base px-2 py-1.5 text-sm text-text"
+      >
+        {THEME_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function TopBar() {
+  const navigate = useNavigate();
+  const loc = useLocation();
+  // Home is the root — nothing to go back to.
+  if (loc.pathname === "/home" || loc.pathname === "/") return null;
+  // loc.key === "default" means the page was landed on directly (no prior
+  // history entry) — fall back to Home instead of a dead back button.
+  const canBack = loc.key !== "default";
+  return (
+    <div className="sticky top-0 z-20 flex items-center gap-1 border-b border-surface0 bg-base/80 px-6 py-2 backdrop-blur">
+      <button
+        onClick={() => (canBack ? navigate(-1) : navigate("/home"))}
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-subtext transition-colors hover:bg-surface0 hover:text-text"
+      >
+        <ArrowLeft size={16} /> Back
+      </button>
+      <NavLink
+        to="/home"
+        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-subtext transition-colors hover:bg-surface0 hover:text-text"
+      >
+        <Home size={15} /> Home
+      </NavLink>
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -38,12 +106,24 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
+        <ThemeSwitcher />
       </aside>
       <main className="flex-1 overflow-y-auto">
+        <TopBar />
         <Routes>
-          <Route path="/" element={<Navigate to="/knowledge" replace />} />
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/reels" element={<ReelsPage />} />
+          <Route path="/reader" element={<ReaderPage />} />
+          <Route path="/table" element={<TablePage />} />
+          <Route path="/board" element={<KanbanPage />} />
+          <Route path="/tags" element={<TagsPage />} />
+          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/sync" element={<SyncPage />} />
+          <Route path="/compare" element={<ComparePage />} />
+          <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/research" element={<ResearchChat />} />
         </Routes>
       </main>

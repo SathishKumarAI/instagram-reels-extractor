@@ -1,0 +1,43 @@
+# Fast caption-only config: metadata + caption from yt-dlp, no ML extraction.
+# Use for a quick first pass / doc build without the multi-GB torch stack.
+# Deep extraction (transcript/OCR/vision) → use config.yaml with the conda env.
+source:
+  type: urls
+  urls_file: reels-phd.txt
+  target: ""
+  login: false
+  username: ""
+  limit: 200
+
+auth:
+  cookies_from_browser: "chrome"   # decrypts sessionid via secretstorage
+  cookies_file: ""
+  browser_profile: "Default"
+
+extract:
+  caption: true         # free, from metadata
+  transcript: false     # needs faster-whisper + torch (conda env)
+  ocr: false            # needs easyocr + torch (conda env)
+  vision: false         # needs claude-cli / api
+  vision_backend: claude-cli
+  whisper_model: base
+  whisper_device: auto
+  whisper_language: ""
+  whisper_translate: true
+  vision_model: claude-sonnet-4-6
+  frame_every_sec: 2
+  vision_concurrency: 1
+  vision_max_retries: 3
+  vision_retry_backoff: 5.0
+
+batch:
+  workers: 3
+
+output:
+  pdf: false            # weasyprint not in lean env
+  docs_site: false      # mkdocs not in lean env
+  combined_pdf: false
+
+paths:
+  data_dir: data
+  output_dir: output

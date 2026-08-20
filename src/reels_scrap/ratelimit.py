@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from .observability import log
 
@@ -41,13 +42,20 @@ def with_retry(
     attempts: int,
     backoff: float,
     label: str = "",
+    fatal: tuple[type[BaseException], ...] = (),
 ) -> T:
-    """Call fn(); retry on Exception up to `attempts` with exponential backoff."""
+    """Call fn(); retry on Exception up to `attempts` with exponential backoff.
+
+    `fatal` names the exceptions that waiting cannot fix (a contended GPU, say) —
+    they are re-raised on the first occurrence instead of costing another attempt.
+    """
     last: Exception | None = None
     for i in range(1, attempts + 1):
         try:
             return fn()
-        except Exception as e:  # noqa: BLE001
+        except fatal:
+            raise
+        except Exception as e:
             last = e
             if i < attempts:
                 wait = backoff * (2 ** (i - 1))

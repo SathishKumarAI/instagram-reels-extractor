@@ -10,6 +10,7 @@ PDF/doc pile into a queryable knowledge base.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -60,31 +61,96 @@ def meta_path(cfg: Config) -> Path:
     return cfg.output_dir / "search_index.json"
 
 
-def build_index(cfg: Config) -> int:
-    """Embed every reel + fact in data_dir. Returns number of vectors indexed."""
+def _rows(r: Reel) -> tuple[list[str], list[dict]]:
+    """The (text, meta) pairs one reel contributes: its document plus one per fact.
+
+    Each row carries `doc_hash` — a digest of everything this reel contributes to
+    the index. Reuse keys on that, not on file mtime: a reel's json is rewritten
+    whenever anything changes (a `variant` from the Compare tab, an annotation,
+    an `author_handle` backfill), and none of that alters the indexed text. On an
+    mtime key, a 665-reel variant backfill would force 665 pointless re-embeds.
+    """
+    texts = [_reel_document(r)]
+    meta: list[dict] = [{"reel_id": r.id, "title": r.title, "url": r.url,
+                         "kind": "reel", "text": r.summary or r.title, "timestamp": None}]
+    for f in r.facts:
+        texts.append(f.text)
+        meta.append({"reel_id": r.id, "title": r.title, "url": r.url,
+                     "kind": "fact", "text": f.text, "timestamp": f.timestamp})
+    h = hashlib.sha1("\x00".join(texts).encode("utf-8")).hexdigest()[:16]
+    for m in meta:
+        m["doc_hash"] = h
+    return texts, meta
+
+
+def build_index(cfg: Config, full: bool = False) -> int:
+    """Embed reels into the search index. Returns the number of vectors indexed.
+
+    Incremental by default: reels whose json is older than the index keep their
+    existing vectors, so a sync that added 7 reels embeds 7 reels — not 673. Pass
+    `full=True` (or `reels-scrap index --full`) after changing the embedding model
+    or the document shape, which invalidates every stored vector.
+    """
     import numpy as np
 
-    reels = [Reel.load(p) for p in sorted(cfg.data_dir.glob("*.json"))]
-    if not reels:
+    paths = sorted(cfg.data_dir.glob("*.json"))
+    if not paths:
         log.warning("no reels to index")
         return 0
 
-    texts: list[str] = []
-    meta: list[dict] = []
-    for r in reels:
-        texts.append(_reel_document(r))
-        meta.append({"reel_id": r.id, "title": r.title, "url": r.url,
-                     "kind": "reel", "text": r.summary or r.title, "timestamp": None})
-        for f in r.facts:
-            texts.append(f.text)
-            meta.append({"reel_id": r.id, "title": r.title, "url": r.url,
-                         "kind": "fact", "text": f.text, "timestamp": f.timestamp})
+    ip, mp = index_path(cfg), meta_path(cfg)
+    old: dict[str, tuple] = {}             # reel_id -> (doc_hash, vectors, meta rows)
+    if not full and ip.exists() and mp.exists():
+        try:
+            old_vecs = np.load(ip)["vectors"]
+            old_meta = json.loads(mp.read_text(encoding="utf-8"))
+            if len(old_meta) == len(old_vecs):
+                by_reel: dict[str, list[int]] = {}
+                for i, m in enumerate(old_meta):
+                    by_reel.setdefault(m["reel_id"], []).append(i)
+                for rid, idxs in by_reel.items():
+                    h = old_meta[idxs[0]].get("doc_hash")
+                    if h:                  # rows written before hashing existed → re-embed
+                        old[rid] = (h, old_vecs[idxs], [old_meta[i] for i in idxs])
+        except Exception as e:
+            log.warning("index reuse skipped (%s) — rebuilding in full", e)
+            old = {}
 
-    vecs = _embed(texts)
-    np.savez_compressed(index_path(cfg), vectors=vecs)
-    meta_path(cfg).write_text(json.dumps(meta, indent=2))
-    log.info("indexed %d vectors from %d reels", len(meta), len(reels))
-    return len(meta)
+    reuse: dict[str, tuple] = {}
+    new_texts: list[str] = []
+    new_meta: list[dict] = []
+    order: list[str] = []                  # reel ids in final index order
+    for p in paths:
+        rid = p.stem
+        order.append(rid)
+        texts, meta = _rows(Reel.load(p))  # cheap: JSON load + hash, no embedding
+        prev = old.get(rid)
+        if prev and prev[0] == meta[0]["doc_hash"]:
+            reuse[rid] = (prev[1], prev[2])
+            continue
+        new_texts.extend(texts)
+        new_meta.extend(meta)
+
+    new_vecs = _embed(new_texts) if new_texts else None
+
+    vec_chunks, meta_out, cursor = [], [], 0
+    for rid in order:
+        if rid in reuse:
+            v, m = reuse[rid]
+            vec_chunks.append(v)
+            meta_out.extend(m)
+        else:
+            n = sum(1 for m in new_meta[cursor:] if m["reel_id"] == rid)
+            vec_chunks.append(new_vecs[cursor:cursor + n])
+            meta_out.extend(new_meta[cursor:cursor + n])
+            cursor += n
+
+    vecs = np.vstack(vec_chunks)
+    np.savez_compressed(ip, vectors=vecs)
+    mp.write_text(json.dumps(meta_out, indent=2), encoding="utf-8")
+    log.info("indexed %d vectors from %d reels (%d re-embedded, %d reused)",
+             len(meta_out), len(order), len(order) - len(reuse), len(reuse))
+    return len(meta_out)
 
 
 def search(cfg: Config, query: str, k: int = 8) -> list[dict]:
@@ -96,7 +162,7 @@ def search(cfg: Config, query: str, k: int = 8) -> list[dict]:
         raise FileNotFoundError("no index — run `reels-scrap index` first")
 
     vectors = np.load(ip)["vectors"]
-    meta = json.loads(mp.read_text())
+    meta = json.loads(mp.read_text(encoding="utf-8"))
     qv = _embed([query])[0]
     scores = vectors @ qv  # cosine (all normalized)
     order = np.argsort(-scores)[:k]

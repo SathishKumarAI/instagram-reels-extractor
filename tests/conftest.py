@@ -25,7 +25,7 @@ def cfg(tmp_path: Path) -> Config:
                 "paths": {"data_dir": str(data), "output_dir": str(out)},
             }
         )
-    )
+    , encoding="utf-8")
     c = Config.load(cfg_path)
     # two reels across two genres, with provenance facts
     Reel(

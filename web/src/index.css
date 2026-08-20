@@ -2,15 +2,192 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme palettes (ported from prepforge) ───────────────────────────────
+   Tokens are RGB channels for Tailwind's rgb(var(--ctp-*) / <alpha>) mapping.
+   Switch themes by setting <html data-theme="..."> (see src/lib/theme.ts).
+   Mocha is the default on :root (no attribute). data-mode=light|dark drives
+   the light-render fixes. */
+
+/* Catppuccin Mocha — default / dark */
+:root {
+  color-scheme: dark;
+  --radius: 0.75rem;
+  --ctp-base: 30 30 46;
+  --ctp-mantle: 24 24 37;
+  --ctp-crust: 17 17 27;
+  --ctp-surface0: 49 50 68;
+  --ctp-surface1: 69 71 90;
+  --ctp-surface2: 88 91 112;
+  --ctp-overlay0: 108 112 134;
+  --ctp-overlay1: 127 132 156;
+  --ctp-subtext0: 166 173 200;
+  --ctp-subtext1: 186 194 222;
+  --ctp-text: 205 214 244;
+  --ctp-rosewater: 245 224 220;
+  --ctp-flamingo: 242 205 205;
+  --ctp-pink: 245 194 231;
+  --ctp-mauve: 203 166 247;
+  --ctp-red: 243 139 168;
+  --ctp-maroon: 235 160 172;
+  --ctp-peach: 250 179 135;
+  --ctp-yellow: 249 226 175;
+  --ctp-green: 166 227 161;
+  --ctp-teal: 148 226 213;
+  --ctp-sky: 137 220 235;
+  --ctp-sapphire: 116 199 236;
+  --ctp-blue: 137 180 250;
+  --ctp-lavender: 180 190 254;
+}
+
+/* Catppuccin Latte — light */
+:root[data-theme="latte"] {
+  color-scheme: light;
+  --ctp-base: 239 241 245;
+  --ctp-mantle: 230 233 239;
+  --ctp-crust: 220 224 232;
+  --ctp-surface0: 204 208 218;
+  --ctp-surface1: 188 192 204;
+  --ctp-surface2: 172 176 190;
+  --ctp-overlay0: 156 160 176;
+  --ctp-overlay1: 140 143 161;
+  --ctp-subtext0: 108 111 133;
+  --ctp-subtext1: 92 95 119;
+  --ctp-text: 76 79 105;
+  --ctp-rosewater: 220 138 120;
+  --ctp-flamingo: 221 120 120;
+  --ctp-pink: 234 118 203;
+  --ctp-mauve: 136 57 239;
+  --ctp-red: 210 15 57;
+  --ctp-maroon: 230 69 83;
+  --ctp-peach: 254 100 11;
+  --ctp-yellow: 223 142 29;
+  --ctp-green: 64 160 43;
+  --ctp-teal: 23 146 153;
+  --ctp-sky: 4 165 229;
+  --ctp-sapphire: 32 159 181;
+  --ctp-blue: 30 102 245;
+  --ctp-lavender: 114 135 253;
+}
+
+/* Databricks — dark (clean data-tool look, brand red accent) */
+:root[data-theme="databricks-dark"] {
+  color-scheme: dark;
+  --ctp-base: 15 18 23;
+  --ctp-mantle: 27 32 39;
+  --ctp-crust: 10 13 17;
+  --ctp-surface0: 38 45 54;
+  --ctp-surface1: 51 59 69;
+  --ctp-surface2: 67 76 87;
+  --ctp-overlay0: 107 117 128;
+  --ctp-overlay1: 139 149 161;
+  --ctp-subtext0: 174 182 192;
+  --ctp-subtext1: 201 208 216;
+  --ctp-text: 232 236 239;
+  --ctp-rosewater: 255 140 120;
+  --ctp-flamingo: 255 120 104;
+  --ctp-pink: 236 110 180;
+  --ctp-mauve: 255 90 68;
+  --ctp-red: 255 90 68;
+  --ctp-maroon: 235 120 120;
+  --ctp-peach: 245 170 70;
+  --ctp-yellow: 240 200 90;
+  --ctp-green: 52 211 153;
+  --ctp-teal: 45 200 200;
+  --ctp-sky: 90 190 240;
+  --ctp-sapphire: 74 158 235;
+  --ctp-blue: 74 158 235;
+  --ctp-lavender: 150 150 240;
+}
+
+/* Databricks — light */
+:root[data-theme="databricks-light"] {
+  color-scheme: light;
+  --ctp-base: 255 255 255;
+  --ctp-mantle: 247 248 249;
+  --ctp-crust: 240 242 244;
+  --ctp-surface0: 231 234 237;
+  --ctp-surface1: 214 218 222;
+  --ctp-surface2: 196 201 206;
+  --ctp-overlay0: 150 157 164;
+  --ctp-overlay1: 107 114 122;
+  --ctp-subtext0: 74 82 90;
+  --ctp-subtext1: 45 52 60;
+  --ctp-text: 17 23 28;
+  --ctp-rosewater: 255 108 92;
+  --ctp-flamingo: 255 90 74;
+  --ctp-pink: 214 51 132;
+  --ctp-mauve: 255 54 33;
+  --ctp-red: 225 29 72;
+  --ctp-maroon: 200 40 40;
+  --ctp-peach: 245 158 11;
+  --ctp-yellow: 217 145 20;
+  --ctp-green: 22 150 96;
+  --ctp-teal: 13 148 148;
+  --ctp-sky: 14 130 200;
+  --ctp-sapphire: 32 114 180;
+  --ctp-blue: 34 114 180;
+  --ctp-lavender: 90 90 220;
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
+html {
+  overflow-x: clip;
+}
+/* keep app content above the fixed grain/glow layers */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 body {
   @apply bg-base text-text antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* radial accent glows — tint from the active theme's mauve/blue/teal */
+  background-image:
+    radial-gradient(60rem 60rem at 85% -10%, rgb(var(--ctp-mauve) / 0.10), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 20%, rgb(var(--ctp-blue) / 0.08), transparent 55%),
+    radial-gradient(40rem 40rem at 50% 120%, rgb(var(--ctp-teal) / 0.06), transparent 60%);
+  background-attachment: fixed;
 }
+
+/* film-grain / dot texture overlay for depth */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* light themes: soften glows + grain so white surfaces stay clean */
+:root[data-mode="light"] body {
+  background-image:
+    radial-gradient(60rem 60rem at 85% -10%, rgb(var(--ctp-mauve) / 0.06), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 20%, rgb(var(--ctp-blue) / 0.05), transparent 55%);
+}
+:root[data-mode="light"] body::before {
+  opacity: 0.02;
+}
+
+::selection {
+  background: rgb(var(--ctp-mauve) / 0.3);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--ctp-mauve));
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -20,4 +197,17 @@ body {
 }
 ::-webkit-scrollbar-track {
   @apply bg-mantle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  body::before {
+    display: none;
+  }
 }

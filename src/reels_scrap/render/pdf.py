@@ -32,7 +32,7 @@ def render_pdf(reel: Reel, cfg: Config) -> Path:
     pdf_dir.mkdir(parents=True, exist_ok=True)
     out = pdf_dir / f"{reel.id}.pdf"
 
-    md_text = Path(reel.markdown_path).read_text()
+    md_text = Path(reel.markdown_path).read_text(encoding="utf-8")
     html = _md_to_html(md_text, reel.title)
     # base_url = markdown dir so relative ../../data/<thumb> resolves
     base = Path(reel.markdown_path).parent

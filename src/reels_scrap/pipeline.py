@@ -7,8 +7,8 @@ stage/per-reel progress without the pipeline knowing what a UI is.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable
 
 from .config import Config
 from .models import Reel
@@ -40,7 +40,7 @@ def _process_one(reel: Reel, cfg: Config) -> tuple[str, dict, str | None]:
         try:
             render_pdf(reel, cfg)
             render_markdown(reel, cfg)  # re-render so PDF link appears
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("pdf failed %s: %s", reel.id, e)
             pdf_err = str(e)
     return reel.id, errs, pdf_err
@@ -69,8 +69,15 @@ def _record(report: RunReport, cfg: Config, reel_id: str, errs: dict, pdf_err: s
 
 
 def run_pipeline(
-    cfg: Config, config_path: str = "<ui>", progress: ProgressCB | None = None
+    cfg: Config,
+    config_path: str = "<ui>",
+    progress: ProgressCB | None = None,
+    refresh_index: bool = True,
 ) -> tuple[list[Reel], RunReport]:
+    """`refresh_index=False` for callers that run the pipeline once per source —
+    the index is rebuilt from the WHOLE corpus every time (~3.5 min at 600 reels),
+    so a 20-source sync would spend over an hour re-embedding. `sync` does it once
+    at the end instead."""
     progress = progress or _noop
     setup_logging(cfg.output_dir)
     report = new_report(config_path, cfg.source.type)
@@ -126,18 +133,24 @@ def run_pipeline(
         progress("site", 0, 1, "building docs site…")
         from .render.docs_site import build_site
 
-        build_site(reels, cfg)
-        progress("site", 1, 1, "site built")
+        # best-effort like the PDF stage — a missing `mkdocs` binary must not
+        # throw away a whole sync of downloaded + vision-processed reels
+        try:
+            build_site(reels, cfg)
+            progress("site", 1, 1, "site built")
+        except Exception as e:
+            log.error("docs site failed: %s (install the `docs` extra)", e)
 
     # refresh the semantic search index (best-effort; never fails the run)
-    try:
-        progress("index", 0, 1, "building search index…")
-        from .search import build_index
+    if refresh_index:
+        try:
+            progress("index", 0, 1, "building search index…")
+            from .search import build_index
 
-        build_index(cfg)
-        progress("index", 1, 1, "index built")
-    except Exception as e:  # noqa: BLE001
-        log.warning("search index skipped: %s", e)
+            build_index(cfg)
+            progress("index", 1, 1, "index built")
+        except Exception as e:
+            log.warning("search index skipped: %s", e)
 
     report.write(cfg.output_dir)
     return reels, report

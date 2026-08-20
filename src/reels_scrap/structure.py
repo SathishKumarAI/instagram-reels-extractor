@@ -50,7 +50,7 @@ def render_markdown(reel: Reel, cfg: Config) -> Path:
     text = tmpl.render(reel=reel, thumb_rel=thumb_rel, pdf_rel=pdf_rel)
 
     out = md_dir / f"{reel.id}.md"
-    out.write_text(text)
+    out.write_text(text, encoding="utf-8")
     reel.markdown_path = str(out)
     reel.save(cfg.data_dir)
     return out
