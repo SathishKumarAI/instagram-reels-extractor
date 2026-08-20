@@ -15,6 +15,25 @@ Update this when you STOP working, not when you start.
      is byte-identical before/after (37, none added, none lost) and a live client
      re-checked health/reels/tags/sync/diff/search/stats. `api/README.md` written.
   - **133 tests pass, ruff clean.** `tsc -b` not re-run — no frontend file changed.
+- **Correction to the line below — the aggregate number was hashtag copying.**
+  Splitting markers by kind (link / sponsorship / tag) on the same 7 reels:
+
+  | arm | link | sponsorship | tag | facts |
+  |---|---|---|---|---|
+  | before any prompt change | 6/7 | **2/17** | 25/175 | 5.29 |
+  | v1 prompt | 7/7 | **1/17** | 50/175 | 5.86 |
+  | v2 prompt (shipped) | 7/7 | **15/17** | 63/175 | 6.14 |
+
+  Links were nearly fine already; v1 made **sponsorship worse** by lumping `#ad` in
+  with "copy every identifier into `structured.links`". v2 splits them —
+  `links` = URLs/@handles only, hashtags to `tags`, sponsorship stated as a fact.
+  The harness now reports `by_kind`, so no future change gets judged on the
+  aggregate. Full write-up: `docs/research/CAPTION-ABLATION-2026-08-20.md`.
+- **Measured and deliberately NOT changed:** `frame_max_width` 1440 loses to 720 on
+  every metric; `minicpm-v45` ties `reels-vision` on link/sponsorship and adds ~0.9
+  facts at the same speed — not enough to move the default the whole corpus used.
+  (Both were only measurable after fixing the frame cache, which ignored
+  `max_width` and would have answered "no effect" for the wrong reason.)
 - **The caption reached the model all along; it was never told to mine it.**
   `scripts/ablate_caption.py` runs each reel twice on the same cached frames, once
   as stored and once with the caption blanked, and counts caption-only markers
