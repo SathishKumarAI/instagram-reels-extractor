@@ -51,10 +51,14 @@ SCHEMA_INSTRUCTION = (
     "spoken transcript and set frame/timestamp accordingly. "
     "Do NOT invent prices, names, or numbers you cannot read or hear.\n"
     "The CAPTION is evidence, not decoration. Copy every identifier it states — URLs, "
-    "@handles, repo/tool names, promo codes, prices, and sponsorship markers (#ad, "
-    "#sponsored, 'paid partnership') — VERBATIM into `structured.links` (for URLs and "
-    "@handles) or into a fact. Never paraphrase or shorten an identifier, and never "
-    "drop a sponsorship marker: who paid for the reel is part of what it claims."
+    "@handles, repo/tool names, promo codes and prices — VERBATIM into a fact, and put "
+    "the URLs and @handles in `structured.links` as well. Never paraphrase or shorten "
+    "an identifier.\n"
+    "`structured.links` holds URLs and @handles ONLY. Topical hashtags are not links: "
+    "put those in `tags`, without the `#`, and only the ones the reel is actually "
+    "about — a caption ending in 40 hashtags is spam, not 40 claims.\n"
+    "A SPONSORSHIP marker (#ad, #sponsored, 'paid partnership', a discount code) is an "
+    "exception: state it as a fact. Who paid for the reel is part of what it claims."
 )
 
 

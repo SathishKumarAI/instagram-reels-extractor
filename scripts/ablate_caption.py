@@ -40,6 +40,18 @@ from reels_scrap.models import Reel
 from reels_scrap.observability import log
 
 MARKER = re.compile(r"(?:#\w{3,}|@[\w.]{3,}|https?://\S+|\b[\w-]+\.(?:com|io|ai|dev|org|net)/\S*)")
+# markers split by kind, because they are not worth the same. A URL or @handle is
+# something the reel points at; a topical #hashtag is often one of forty and a
+# model that dumps the whole block scores 30/30 on a reel it barely read
+# (measured 2026-08-20, minicpm-v45 on DKTrtRiSYVg). Judge on `link` recall;
+# `tag` recall is context, and `sponsorship` is the one hashtag class that counts.
+SPONSOR = ("ad", "sponsored", "paidpartnership", "partner", "gifted", "collab")
+
+
+def marker_kind(m: str) -> str:
+    if m.startswith("#"):
+        return "sponsorship" if any(s in m.lower() for s in SPONSOR) else "tag"
+    return "link"
 
 
 def _norm(s: str) -> str:
@@ -147,6 +159,11 @@ def main() -> None:
     def mean(arm: str, key: str) -> float:
         return round(sum(r[arm][key] for r in ok) / len(ok), 2) if ok else 0.0
 
+    def recall_by_kind(kind: str) -> dict:
+        want = sum(1 for r in ok for m in r["markers"] if marker_kind(m) == kind)
+        got = sum(1 for r in ok for m in r["with"]["hits"] if marker_kind(m) == kind)
+        return {"markers": want, "found": got, "recall": round(got / want, 3) if want else None}
+
     summary = {
         "model": name,
         "backend": backend,
@@ -156,6 +173,9 @@ def main() -> None:
         "recall_with_caption": (
             round(sum(len(r["with"]["hits"]) for r in ok) / total, 3) if total else 0.0
         ),
+        # the number to judge on: a link is something the reel points at, a topical
+        # hashtag is one of forty and copying the block whole is not comprehension
+        "by_kind": {k: recall_by_kind(k) for k in ("link", "sponsorship", "tag")},
         "facts_with": mean("with", "facts"),
         "on_screen_with": mean("with", "on_screen"),
         "summary_chars_with": mean("with", "summary_chars"),
