@@ -96,6 +96,21 @@ def test_prompt_carries_the_transcript_and_keeps_hashtags():
     assert "#manuspartner" in p and "#ad" in p        # tags survive a trimmed caption
 
 
+def test_prompt_asks_for_caption_identifiers_verbatim():
+    """Measured 2026-08-20: the caption reached the model all along, but only 17%
+    of its URLs/@handles/sponsorship markers ended up in the record. Naming them as
+    evidence took that to 45% (docs/research/CAPTION-ABLATION-2026-08-20.md).
+
+    Both halves matter — the schema every backend sees, and the floors the local
+    backend needs spelled out — so a future prompt trim cannot drop one silently.
+    """
+    from reels_scrap.extract.prompts import LOCAL_NUDGE, SCHEMA_INSTRUCTION
+
+    for marker in ("CAPTION is evidence", "VERBATIM", "structured.links", "#ad"):
+        assert marker in SCHEMA_INSTRUCTION, marker
+    assert "links" in LOCAL_NUDGE
+
+
 def test_prompt_without_a_transcript_says_nothing_about_one():
     from reels_scrap.extract.vision import _prompt_header
 

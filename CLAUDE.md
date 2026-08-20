@@ -55,8 +55,21 @@ cd web && npx tsc -b
 `scripts/ollama-vision.Modelfile` builds `reels-vision` (qwen2.5vl 7B q8, 32k ctx)
 because the stock model's 4096 context rejects the frames we send. Rebuild after
 editing it: `ollama create reels-vision -f scripts/ollama-vision.Modelfile`.
-`LOCAL_NUDGE` in `extract/vision.py` applies only to the local backend — a 7B reads
+`LOCAL_NUDGE` in `extract/prompts.py` applies only to the local backend — a 7B reads
 "3-8 facts" as "3". Do not add it to the Claude prompt.
+
+## Where to look
+
+| Question | File |
+|---|---|
+| What is the model **told** — schema, nudges, caption/transcript assembly | `extract/prompts.py` |
+| How its answer is **read** — JSON salvage, tags, fact hygiene | `extract/normalise.py` |
+| Which backend runs, retries, GPU bail-out, provenance | `extract/vision.py` |
+| An HTTP endpoint | `api/routes/<group>.py` — table in `api/README.md` |
+| Why a measurement says what it says | `docs/research/` |
+
+Every directory with more than ~4 source files carries a `README.md` whose first
+section is a change → file table. Read that instead of the code.
 
 **The GPU is shared with your other repos.** Never start a local-vision run onto a
 busy card: ollama silently offloads layers to CPU and every reel then dies on the

@@ -3,7 +3,37 @@
 Update this when you STOP working, not when you start.
 
 - **Last touched:** 2026-08-20 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** local sync green end to end and Epic M's M2/M3/M7 shipped.
+- **Where I stopped:** branch `refactor/split-vision-module`, 3 commits, not merged.
+  1. **`extract/` split** — `prompts.py` (what the model is told), `normalise.py`
+     (how its answer is read), `vision.py` (backends, retry, provenance, 330 lines).
+     Old private names re-exported from `vision` under `__all__`, so nothing that
+     imported them moved. `extract/README.md` has the change → file table.
+  2. **The caption gap is measured and closed** — see below.
+  3. **`api/app.py` 939 → 59 lines**: 37 endpoints in one `create_app` became
+     `routes/{library,sync,compare,discover,exports,qa,health}.py`, each a
+     `build(cfg, config_path) -> APIRouter`, plus `api/deps.py`. OpenAPI path set
+     is byte-identical before/after (37, none added, none lost) and a live client
+     re-checked health/reels/tags/sync/diff/search/stats. `api/README.md` written.
+  - **133 tests pass, ruff clean.** `tsc -b` not re-run — no frontend file changed.
+- **The caption reached the model all along; it was never told to mine it.**
+  `scripts/ablate_caption.py` runs each reel twice on the same cached frames, once
+  as stored and once with the caption blanked, and counts caption-only markers
+  (`#tag`/`@handle`/URL present in the caption, absent from transcript and
+  on-screen text). Blanking cost 4.5× the markers, so delivery was never the bug.
+  Naming identifiers as evidence in `SCHEMA_INSTRUCTION` + `LOCAL_NUDGE`'s `links`
+  field took recall **0.169 → 0.453** on the same 11 reels / 296 markers (blind arm
+  0.034). 3 of 11 reels lost a marker they had. Also found: `max_tokens: 1500` in
+  `config-local.yaml` truncated 1 reel in 12 mid-JSON and all 3 attempts failed —
+  now 4000. Full method + ceilings: `docs/research/CAPTION-ABLATION-2026-08-20.md`.
+- **Two live findings, neither fixed:**
+  - `extract/ocr.py` writes `reel.ocr_text` and **nothing reads it** — not the
+    prompt, not the index. 23 reels carry it. Wire it in or delete the stage.
+  - `search._reel_document` indexes title/genre/summary/structured/transcript —
+    **not** caption, `key_points` or `on_screen_text`. The identifiers just
+    recovered land in `structured.links`, so they are indexed, but a rare exact
+    token (`@handle`, a URL) is weak for dense retrieval anyway; lexical fallback
+    is the real fix and does not exist.
+- **Previously:** local sync green end to end and Epic M's M2/M3/M7 shipped.
   - **Sync (`config-local.yaml`, local GPU vision), 3m40s:** all **20 sources ok**
     — the saved-feed collection fix is holding — **1 new reel** (`DcLKTQduNqp`,
     a PhD-fellowship post) ingested and extracted locally: **6 facts / 5 tags /
@@ -265,9 +295,11 @@ Update this when you STOP working, not when you start.
 - **Where it stands:** **114 tests pass**, ruff clean, `tsc -b` + `vite build`
   clean. 13 tabs. Corpus 674 reels. API + Vite dev server both up.
 - **Known gaps, stated plainly:**
-  - **Every local model misses caption-derived claims** (`#manuspartner`, `#ad`)
-    and small print. That is an input problem, not a ranking — the caption may not
-    be reaching the model. First thing to chase.
+  - ~~Every local model misses caption-derived claims — the caption may not be
+    reaching the model.~~ **Answered 2026-08-20: it reaches it.** Recall is now
+    0.45, not 1.0; the remaining miss is real but is partly tag spam the metric
+    counts anyway. Only the local arm was measured — the Claude arm is unmeasured
+    under the new prompt.
   - `deepseek-ocr` was stopped at 10 of 30 attempts once the failure mode repeated
     ten times; the report says so rather than implying a full arm.
   - The Claude arm is 28 of 30: two reels return exit 0 with empty stdout from the
@@ -276,9 +308,21 @@ Update this when you STOP working, not when you start.
     endpoint after heavy use. The hashtag path works (27 candidates).
   - Local RAG chat (L1) not built. The UI was verified by build + live API, not by
     eye — no Chrome extension on this box, and the devtools MCP loses its browser.
-- **Next session:** the caption/fine-print gap above (does the caption actually
-  reach the local model — measure it, do not read the prompt), then Epic M
-  **M12** (re-run one reel on the other model from the reader — the diff panel is
-  the natural home for it) and **M10** (cost-per-model rollup).
+- **Next session, in order:**
+  1. **Merge the branch** (`refactor/split-vision-module`, 3 commits) — nothing is
+     on `main` yet.
+  2. **Re-measure the Claude arm** under the new prompt:
+     `scripts/ablate_caption.py --backend claude-cli --limit 6` (~$2, ~3 min).
+     Every number quoted above is local-only.
+  3. **The corpus is still on the old prompt.** 719 of 755 records were written by
+     `claude-sonnet-4-6` before this change, so their `structured.links` is empty.
+     Decide: re-extract (Batch API halves the price and the run is not
+     latency-sensitive) or leave the back catalogue and only improve going forward.
+  4. **OCR** — wire `reel.ocr_text` into `prompts.prompt_header` and re-run the
+     ablation to see if it moves fine-print recall, or delete the stage. Do not
+     leave it computed-and-unread.
+  5. Epic M **M12** (re-run one reel on the other model from the reader — the diff
+     panel is its natural home) and **M10** (cost-per-model rollup;
+     `routes/exports.py:PRICES` is per-family and does not know local is $0).
 - **Blocked on:** nothing. Two decisions are the owner's: whether a local model
   becomes the sync default, and whether to re-extract the corpus with one.
