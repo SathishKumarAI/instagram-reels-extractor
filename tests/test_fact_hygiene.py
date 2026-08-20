@@ -109,6 +109,11 @@ def test_prompt_asks_for_caption_identifiers_verbatim():
     for marker in ("CAPTION is evidence", "VERBATIM", "structured.links", "#ad"):
         assert marker in SCHEMA_INSTRUCTION, marker
     assert "links" in LOCAL_NUDGE
+    # v1 lumped #ad in with "copy every identifier into structured.links" and
+    # sponsorship recall FELL (2/17 -> 1/17): the one hashtag class that matters was
+    # buried among the thirty-nine that do not. Both halves of the fix are load-bearing.
+    assert "URLs and @handles ONLY" in SCHEMA_INSTRUCTION
+    assert "SPONSORSHIP" in SCHEMA_INSTRUCTION and "state it as a fact" in SCHEMA_INSTRUCTION
 
 
 def test_prompt_without_a_transcript_says_nothing_about_one():

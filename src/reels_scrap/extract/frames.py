@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from functools import lru_cache
@@ -28,21 +29,40 @@ def ensure_ffmpeg() -> None:
     ffmpeg_bin()  # raises if unavailable
 
 
+SPEC_FILE = ".frames.json"
+
+
+def _spec(out_dir: Path) -> dict:
+    p = out_dir / SPEC_FILE
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+
+
 def sample_frames(video: Path, out_dir: Path, every_sec: int = 2,
                   force: bool = False, max_width: int = 0) -> list[Path]:
     """Extract 1 frame every `every_sec` seconds. Returns sorted frame paths.
 
-    Cached: if frames were already sampled into out_dir, reuse them (skip ffmpeg)
-    unless force=True. Big speed win on re-extract/backfill runs.
+    Cached, but **keyed on the sampling spec** — `every_sec` and `max_width` are
+    written to `.frames.json` beside the frames and re-sampled when they change.
+    Keying on existence alone made both settings inert for any reel already on
+    disk: raising `frame_max_width` from 720 changed nothing for 755 reels, and an
+    experiment on frame resolution would have measured "no effect" and been wrong.
 
     `max_width` > 0 downscales frames to that width (keeping aspect) — fewer pixels
     means fewer vision image tokens, at negligible quality cost for genre/summary.
     """
     ensure_ffmpeg()
     out_dir.mkdir(parents=True, exist_ok=True)
+    want = {"every_sec": int(every_sec), "max_width": int(max_width or 0)}
     cached = sorted(out_dir.glob("frame_*.jpg"))
-    if cached and not force:
+    if cached and not force and _spec(out_dir) == want:
         return cached
+    for stale in cached:            # a coarser spec yields fewer frames; leftovers
+        stale.unlink(missing_ok=True)   # from the old one would be silently mixed in
     pattern = out_dir / "frame_%04d.jpg"
     fps = f"1/{max(1, every_sec)}"
     vf = f"fps={fps}"
@@ -57,6 +77,7 @@ def sample_frames(video: Path, out_dir: Path, every_sec: int = 2,
         str(pattern),
     ]
     subprocess.run(cmd, check=True)
+    (out_dir / SPEC_FILE).write_text(json.dumps(want), encoding="utf-8")
     return sorted(out_dir.glob("frame_*.jpg"))
 
 
