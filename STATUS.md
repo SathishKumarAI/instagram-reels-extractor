@@ -3,18 +3,26 @@
 Update this when you STOP working, not when you start.
 
 - **Last touched:** 2026-08-20 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** branch `refactor/split-vision-module`, 3 commits, not merged.
-  1. **`extract/` split** — `prompts.py` (what the model is told), `normalise.py`
-     (how its answer is read), `vision.py` (backends, retry, provenance, 330 lines).
-     Old private names re-exported from `vision` under `__all__`, so nothing that
-     imported them moved. `extract/README.md` has the change → file table.
-  2. **The caption gap is measured and closed** — see below.
-  3. **`api/app.py` 939 → 59 lines**: 37 endpoints in one `create_app` became
-     `routes/{library,sync,compare,discover,exports,qa,health}.py`, each a
-     `build(cfg, config_path) -> APIRouter`, plus `api/deps.py`. OpenAPI path set
-     is byte-identical before/after (37, none added, none lost) and a live client
-     re-checked health/reels/tags/sync/diff/search/stats. `api/README.md` written.
-  - **133 tests pass, ruff clean.** `tsc -b` not re-run — no frontend file changed.
+- **Where I stopped:** everything below is **merged to `main`** — PRs #8–#13, six
+  squash merges, branches left on the remote (nothing deleted).
+  **140 tests pass, ruff clean.** `tsc -b` not re-run: no frontend file changed all
+  session.
+
+  | PR | What |
+  |---|---|
+  | #8 | `extract/` split (`prompts` / `normalise` / `vision`) · `api/app.py` 939 → 59 lines, 7 route groups · caption prompt v1 |
+  | #9 | prompt v2 (sponsorship 1/17 → 15/17) · frame cache keyed on the sampling spec · harness gains `--backend`/`--frame-width`/`--no-blind`/`by_kind` |
+  | #10 | `cli.py` 644 → `cli/` package, 6 modules · `__main__.py` restores `python -m reels_scrap.cli` |
+  | #11 | two project-scoped skills in `.claude/skills/` |
+  | #12 | `tokens.model` records the model that **ran** (live: config said sonnet-4-6, CLI ran `claude-opus-5`) · prices refreshed, per-record, local = $0 |
+  | #13 | OCR text reaches the prompt (15 lines) — the stage had written to nothing |
+
+  Three files were over the 500-line ceiling this morning; none are now. The
+  biggest is `cli/pipeline.py` at 205.
+- **Two skills now load automatically in this repo** (`.claude/skills/`):
+  `measuring-extraction-changes` (run the A/B harness, read `by_kind`, never trust
+  an aggregate) and `splitting-oversized-modules` (split by concern, re-export old
+  names, verify against a contract diff). **Not subagent-tested** — see their README.
 - **Correction to the line below — the aggregate number was hashtag copying.**
   Splitting markers by kind (link / sponsorship / tag) on the same 7 reels:
 
@@ -328,20 +336,22 @@ Update this when you STOP working, not when you start.
   - Local RAG chat (L1) not built. The UI was verified by build + live API, not by
     eye — no Chrome extension on this box, and the devtools MCP loses its browser.
 - **Next session, in order:**
-  1. **Merge the branch** (`refactor/split-vision-module`, 3 commits) — nothing is
-     on `main` yet.
-  2. **Re-measure the Claude arm** under the new prompt:
+  1. **Re-measure the Claude arm** under the v2 prompt:
      `scripts/ablate_caption.py --backend claude-cli --limit 6` (~$2, ~3 min).
-     Every number quoted above is local-only.
-  3. **The corpus is still on the old prompt.** 719 of 755 records were written by
-     `claude-sonnet-4-6` before this change, so their `structured.links` is empty.
-     Decide: re-extract (Batch API halves the price and the run is not
-     latency-sensitive) or leave the back catalogue and only improve going forward.
-  4. **OCR** — wire `reel.ocr_text` into `prompts.prompt_header` and re-run the
-     ablation to see if it moves fine-print recall, or delete the stage. Do not
-     leave it computed-and-unread.
-  5. Epic M **M12** (re-run one reel on the other model from the reader — the diff
-     panel is its natural home) and **M10** (cost-per-model rollup;
-     `routes/exports.py:PRICES` is per-family and does not know local is $0).
+     Every number in this file is local-arm only.
+  2. **The corpus predates all of it.** 719 of 755 records were written before the
+     prompt changes, so their `structured.links` is empty and their `tokens.model`
+     label is unverifiable. Owner's call: re-extract (**Batch API is 50% off and
+     this is not latency-sensitive** — needs `ANTHROPIC_API_KEY`, which is not set
+     on this box) or leave the back catalogue and only improve going forward.
+  3. **Text-only path for talking-head reels** — `extract/text_summary.py` already
+     exists; a reel with a strong transcript and little overlay does not need six
+     frames of VLM. Needs a routing signal measured, not guessed.
+  4. Epic M **M12** (re-run one reel on the other model from the reader — the diff
+     panel is its natural home) and **M10** (per-model cost rollup in the UI;
+     `routes/exports.py` now prices each record correctly but nothing groups by
+     model yet).
+  5. Optional: order the OCR lines by frame and re-run `--blank ocr` — it may
+     remove the 0.5-fact cost that keeps the stage off by default.
 - **Blocked on:** nothing. Two decisions are the owner's: whether a local model
   becomes the sync default, and whether to re-extract the corpus with one.
