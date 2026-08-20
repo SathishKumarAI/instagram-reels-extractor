@@ -13,12 +13,21 @@ from ...models import Reel
 from ..deps import load_reels
 from ..schemas import CategoryStat, Stats
 
-# rough USD per 1M tokens by model family (Claude). Used for an estimate only.
-PRICES = {"opus": (15.0, 75.0), "sonnet": (3.0, 15.0), "haiku": (0.8, 4.0)}
+# USD per 1M tokens (input, output) by model family, current line as of 2026-08-20:
+# Opus 5 $5/$25, Sonnet 5 $3/$15, Haiku 4.5 $1/$5. The old opus row said $15/$75 —
+# three generations stale, and it now matters: records carry `claude-opus-5` since
+# provenance started reading the CLI envelope instead of the config. A local model
+# is $0 and is priced as such rather than falling through to the sonnet default.
+# Only an estimate: a record with a real `cost_usd` from the CLI uses that instead.
+PRICES = {"opus": (5.0, 25.0), "sonnet": (3.0, 15.0), "haiku": (1.0, 5.0)}
+LOCAL_HINTS = ("qwen", "minicpm", "gemma", "reels-vision", "deepseek", "llava", "llama")
 
 
 def price(model: str) -> tuple[float, float]:
+    """(input, output) $/1M for a model name. Local models cost nothing to run."""
     m = (model or "").lower()
+    if any(h in m for h in LOCAL_HINTS):
+        return (0.0, 0.0)
     for k, v in PRICES.items():
         if k in m:
             return v
@@ -41,7 +50,6 @@ def build(cfg: Config, config_path: str) -> APIRouter:
     def stats() -> Stats:
         from collections import Counter, defaultdict
 
-        pin, pout = price(cfg.extract.vision_model)
         reels = load_reels(cfg)
         cats: dict[str, dict] = defaultdict(lambda: {"reels": 0, "in": 0, "out": 0, "cost": 0.0})
         tags: Counter = Counter()
@@ -51,7 +59,11 @@ def build(cfg: Config, config_path: str) -> APIRouter:
             g = r.genre or "uncategorized"
             i, o = int(r.tokens.get("input", 0)), int(r.tokens.get("output", 0))
             # real cost from the CLI envelope when present, else estimate from tokens
+            # at THIS record's model — the corpus is mixed (Claude arms and local
+            # ones), so pricing it all at the configured model charged $0 runs
+            # sonnet rates and billed a local backfill as if it had been Claude
             c = r.tokens.get("cost_usd")
+            pin, pout = price(str(r.tokens.get("model") or cfg.extract.vision_model))
             c = float(c) if c else round(i / 1e6 * pin + o / 1e6 * pout, 4)
             cats[g]["reels"] += 1
             cats[g]["in"] += i

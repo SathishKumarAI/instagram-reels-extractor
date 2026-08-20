@@ -111,6 +111,23 @@ def _image_content(items, url_style: bool) -> list[dict]:
     return content
 
 
+def _cli_model(env: dict) -> str:
+    """The model the CLI turn actually ran on, from its `modelUsage` map.
+
+    Keys are wire ids (`claude-opus-5[1m]`); `canonicalModel` is the plain one and
+    is what belongs in provenance. Returns "" on an older CLI that omits the field,
+    so the caller keeps the configured name rather than recording nothing.
+    """
+    usage = env.get("modelUsage") or {}
+    if not isinstance(usage, dict) or not usage:
+        return ""
+    key, info = max(
+        usage.items(),
+        key=lambda kv: (kv[1] or {}).get("outputTokens", 0) if isinstance(kv[1], dict) else 0,
+    )
+    return str((info or {}).get("canonicalModel") or key)
+
+
 def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
     """Returns (parsed model JSON, {input, output} token usage)."""
     claude = shutil.which("claude")
@@ -153,6 +170,14 @@ def _via_cli(reel: Reel, cfg: Config, items) -> tuple[dict, dict]:
             "output": int(u.get("output_tokens", 0)),
             "cost_usd": float(env.get("total_cost_usd", 0.0)),            # real, from CLI
         }
+        # which model ACTUALLY ran. cfg.extract.vision_model is a wish: the CLI runs
+        # whatever the Claude Code session is on, so 719 stored records claim
+        # `claude-sonnet-4-6` for turns that ran on something else entirely. The
+        # envelope names it; take the arm that did the most work when several appear
+        # (a turn can use a small model for a sub-step).
+        used = _cli_model(env)
+        if used:
+            tokens["model"] = used
     except (json.JSONDecodeError, ValueError, AttributeError):
         pass  # older CLI / non-envelope output → parse raw, no usage
     return _parse_json(text), tokens
@@ -327,11 +352,14 @@ def _extract(reel: Reel, cfg: Config, backend: str, items) -> tuple[dict, dict, 
         used = b
     tokens = dict(tokens or {})
     tokens["backend"] = used   # provenance: which model actually produced this record
-    # "local->claude-cli" is a fallback that ran on Claude — name Claude, not the
-    # local model that failed
-    tokens["model"] = (
-        cfg.extract.vision_local.model if used == "local" else cfg.extract.vision_model
-    )
+    # a backend that reported the model it ran (claude-cli reads its own envelope)
+    # wins over the configured name, which is only a request
+    if not tokens.get("model"):
+        # "local->claude-cli" is a fallback that ran on Claude — name Claude, not the
+        # local model that failed
+        tokens["model"] = (
+            cfg.extract.vision_local.model if used == "local" else cfg.extract.vision_model
+        )
     return data, tokens, used
 
 
