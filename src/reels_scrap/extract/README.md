@@ -31,8 +31,9 @@ Read this table instead of the code.
 
 ## Traps
 
-- `ocr.py` writes `reel.ocr_text` and **nothing reads it** — it is not in the
-  prompt and not in the index. Wire it in or delete it; do not assume the model
-  is seeing it.
+- `ocr.py` writes `reel.ocr_text`; since 2026-08-20 `prompts.py` feeds up to
+  `OCR_LINES = 15` of them to the model. The stage is still **off** in every config,
+  and the cap is measured, not guessed: 40 lines cost 1.5 facts/reel
+  (`docs/research/OCR-IN-PROMPT-2026-08-20.md`). It is still not in the search index.
 - `_run_local` looks up `_via_local` per attempt on purpose: tests and the bench
   monkeypatch `vision._via_local`, and a hoisted reference misses the patch.

@@ -22,6 +22,7 @@ GENRES = ["tutorial", "product", "educational", "recipe", "news", "entertainment
 
 CAPTION_CHARS = 1200
 TRANSCRIPT_CHARS = 2500
+OCR_LINES = 15          # measured: 40 lines crowded out claims (facts 7.2 -> 5.8)
 
 SCHEMA_INSTRUCTION = (
     "Return ONLY a single JSON object (no prose, no code fences) with this shape:\n"
@@ -121,6 +122,19 @@ def prompt_header(reel: Reel) -> str:
         parts.append(
             f"\nWhat is said in the reel (transcript{', translated' if reel.transcript_translated else ''}):\n"
             f"{spoken[:TRANSCRIPT_CHARS]}{'… [trimmed]' if len(spoken) > TRANSCRIPT_CHARS else ''}\n"
+        )
+    # OCR, when the stage ran. easyocr reads small print the VLM skims past — 55-103
+    # lines on a slide-heavy reel against the ~8 the model reports itself. It is
+    # noisy and unordered, so it is offered as a hint to check, never as truth:
+    # `reel.ocr_text` was written by ocr.py and read by NOTHING until 2026-08-20.
+    ocr = [t for t in (reel.ocr_text or []) if t.strip()]
+    if ocr:
+        shown = ocr[:OCR_LINES]
+        parts.append(
+            "\nText an OCR pass read off the frames (unordered, may contain errors — "
+            "use it to catch small print you would otherwise miss, and ignore what the "
+            f"frames contradict):\n{' | '.join(shown)}"
+            f"{f' … [+{len(ocr) - len(shown)} more]' if len(ocr) > len(shown) else ''}\n"
         )
     parts.append(f"\n{SCHEMA_INSTRUCTION}\n")
     return "".join(parts)
