@@ -3,6 +3,7 @@ import { api, type Answer } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CollectionChip } from "@/components/TagChip";
 import { Send, Loader2, ExternalLink } from "lucide-react";
 
 interface Turn {
@@ -66,6 +67,10 @@ export default function ResearchChat() {
                       <a href={c.url} target="_blank" className="flex items-center gap-1 text-blue hover:underline">
                         {c.title.slice(0, 48)} <ExternalLink size={11} />
                       </a>
+                      {/* which shelf the answer drew from */}
+                      {(c.collections ?? []).map((n) => (
+                        <CollectionChip key={n} name={n} />
+                      ))}
                     </div>
                   ))}
                 </div>

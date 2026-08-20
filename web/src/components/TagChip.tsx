@@ -57,7 +57,9 @@ export function CollectionChip({
   size = "sm",
 }: {
   name: string;
-  onClick?: () => void;
+  // the event is passed through so a chip inside a clickable row can stop the
+  // row's own handler (search hits) — callers that ignore it still type-check
+  onClick?: (e: React.MouseEvent) => void;
   size?: "sm" | "md";
 }) {
   const accent = accentFor(name);

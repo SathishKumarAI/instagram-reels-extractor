@@ -2,10 +2,34 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-19 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** sync green, **0 new reels** — nothing new had been saved on
-  Instagram since 08-17. 11 ingest failures, all the permanent carousel class
-  (`No video formats found`). 4 reels still await vision; see the GPU guard below.
+- **Last touched:** 2026-08-20 (on the **Windows** box, not the Rocky Linux one)
+- **Where I stopped:** local sync green end to end and Epic M's M2/M3/M7 shipped.
+  - **Sync (`config-local.yaml`, local GPU vision), 3m40s:** all **20 sources ok**
+    — the saved-feed collection fix is holding — **1 new reel** (`DcLKTQduNqp`,
+    a PhD-fellowship post) ingested and extracted locally: **6 facts / 5 tags /
+    289-char summary / 4 structured fields**, in line with the bench's local arm.
+    Index: 755 reels, 6 re-embedded, 749 reused (0.55s class, not the 4m rebuild).
+  - **`extract-cmd --missing-vision`: 0 reels.** Last session's 4 leftovers are
+    gone; nothing on disk is waiting for a summary.
+  - GPU was free before the run (1.4/16GB, no foreign model) — `gpu_blockers()`
+    let it start, and no reel hit the 240s timeout.
+- **M2/M3/M7 done 2026-08-20** (Epic M's remaining P1/P2 UI slice):
+  - **M2 — `GET /api/reels/{id}/variants/diff?a=&b=`**: diffs variants **already
+    stored**, so it is read-only, $0 and instant. `POST /compare` re-runs models
+    at ~30s and ~$0.34; 641 reels already carry both arms, so the reader wanted
+    the difference, not another run. Reader gained a *Model diff* section: only-a /
+    only-b claims side by side, shared claims folded away, and a picker when a reel
+    has more than two arms (one live reel has three: `claude-cli`, `local`,
+    `local-prev`). Verified live: `Cs1FGNcoynY` reads 5 Claude-only, 6 local-only,
+    5.5s vs $0.27.
+  - **M3 — model filter** on the Reels grid, persisted in saved views.
+    `(no provenance)` is an explicit option; without it the handful of records with
+    no `tokens.model` cannot be found at all.
+  - **M7 — the shelf travels with the hit**: `SearchHit.collections` and
+    `Citation.collections` filled from `reels_by_collection()`; chips render on
+    search hits (click filters the grid) and on chat sources. Search hits became a
+    `div` — a chip is a button and a button cannot nest inside one.
+  - **132 tests pass**, ruff clean, `tsc -b` + `vite build` clean.
 - **The GPU is shared with your other projects, and that is what broke the sync.**
   A local-vision run started onto a card already holding another repo's
   `gemma4:12b`; ollama put 3 of 29 layers on CPU (`ollama ps` says
@@ -252,9 +276,9 @@ Update this when you STOP working, not when you start.
     endpoint after heavy use. The hashtag path works (27 candidates).
   - Local RAG chat (L1) not built. The UI was verified by build + live API, not by
     eye — no Chrome extension on this box, and the devtools MCP loses its browser.
-- **Next session:** the caption/fine-print gap above, then Epic M **M2** (inline
-  local-vs-cloud diff in the reader — 641 reels have both variants and
-  `diff_facts` is pure, but there is still **no read-only endpoint that diffs
-  stored variants**), M3 (filter by model) and M7 (collection on search hits).
+- **Next session:** the caption/fine-print gap above (does the caption actually
+  reach the local model — measure it, do not read the prompt), then Epic M
+  **M12** (re-run one reel on the other model from the reader — the diff panel is
+  the natural home for it) and **M10** (cost-per-model rollup).
 - **Blocked on:** nothing. Two decisions are the owner's: whether a local model
   becomes the sync default, and whether to re-extract the corpus with one.

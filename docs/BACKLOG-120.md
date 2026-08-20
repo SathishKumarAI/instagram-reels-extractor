@@ -217,12 +217,12 @@ the conversation.
 | # | Feature | P | E | V | Notes |
 |---|---|---|---|---|---|
 | M1 | ~~Show which model produced a record, everywhere it is read~~ **DONE 2026-08-05** | P1 | S | ★★★ | `ModelBadge` on card, drawer, reader and table; `ReelSummary.model` added. Corpus reads 644 Claude / 25 local / 5 unknown |
-| M2 | Per-reel model diff, inline (not only the Compare tab) | P1 | M | ★★★ | when a reel has 2+ `variants`, offer a toggle on the reader: read the local version vs the cloud one, with changed claims highlighted |
-| M3 | "Which model wrote this?" filter | P2 | S | ★★ | filter the library by backend — find every record produced locally before the quality fixes landed |
+| M2 | ~~Per-reel model diff, inline (not only the Compare tab)~~ **DONE 2026-08-20** | P1 | M | ★★★ | `GET /api/reels/{id}/variants/diff` diffs variants **already on disk** — read-only, $0, no model runs (the Compare tab is where you pay). Reader shows only-a / only-b claims + a picker; a reel with 3 stored arms offers all three |
+| M3 | ~~"Which model wrote this?" filter~~ **DONE 2026-08-20** | P2 | S | ★★ | model select on the Reels grid, saved in views. `(no provenance)` is its own option — the 5 records with no `tokens.model` were otherwise unfindable |
 | M4 | ~~Collection tags on every reel (`front-end`, `topic-books`, `ai`)~~ **DONE 2026-08-05** | P1 | M | ★★★ | `CollectionChip` (same FNV-1a accent as G1) on card, drawer, reader, table. `reels_by_collection()` inverts the manifests; the reel **detail** endpoint carries `collections` now — it never did, so the reader's chips rendered nothing |
 | M5 | ~~Filter/browse by collection tag~~ **DONE 2026-08-05** | P1 | S | ★★★ | chip click filters the grid; `/reels?collection=<slug>` is the deep link from reader and table |
 | M6 | ~~Multi-collection reels rendered honestly~~ **DONE 2026-08-05** | P2 | S | ★★ | every chip renders, no truncation — 175 of 674 reels sit on 2+ shelves, 2 on three |
-| M7 | Collection tag on search results and chat citations | P2 | S | ★★ | answers should say which shelf a citation came from |
+| M7 | ~~Collection tag on search results and chat citations~~ **DONE 2026-08-20** | P2 | S | ★★ | `SearchHit.collections` + `Citation.collections`, filled from `reels_by_collection()`; chips on search hits (click filters the grid) and on chat sources |
 | M8 | Manual tags — your own words, per reel | P2 | M | ★★ | model tags are generated; a hand tag is a promise. Keep them visually distinct |
 | M9 | Tag/collection rename that updates every surface | P2 | M | ★★ | rename exists for tags; collections are renamed by editing `sources.json` by hand |
 | M10 | Cost-per-model rollup in the UI | P2 | S | ★★ | "this month: local 412 reels $0 · cloud 61 reels $23" — data is in `tokens`, → L2 |

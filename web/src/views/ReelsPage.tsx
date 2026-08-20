@@ -46,6 +46,9 @@ export default function ReelsPage() {
   const [genre, setGenre] = useState("");
   const [account, setAccount] = useState("");
   const [collection, setCollection] = useState("");
+  // M3: which model wrote the record. "" = any; a record with no provenance is
+  // its own answer, so it gets an explicit option rather than being unfindable.
+  const [model, setModel] = useState("");
   const [status, setStatus] = useState<"all" | "starred" | "unread" | "archived">("all");
   const [sort, setSort] = useState<Sort>("newest");
   const [period, setPeriod] = useState("all");
@@ -75,11 +78,12 @@ export default function ReelsPage() {
   const saveCurrentView = () => {
     const name = prompt("Save this filter as a view named:");
     if (!name) return;
-    api.saveView(name, { genre, account, collection, tag: tag ?? "", status, sort }).then(setViews).catch(() => {});
+    api.saveView(name, { genre, account, collection, model, tag: tag ?? "", status, sort }).then(setViews).catch(() => {});
   };
   const applyView = (v: SavedView) => {
     const f = v.filters;
     setGenre(f.genre ?? ""); setAccount(f.account ?? ""); setCollection(f.collection ?? "");
+    setModel(f.model ?? "");
     setTag(f.tag || null); setStatus((f.status as typeof status) ?? "all");
     setSort((f.sort as Sort) ?? "likes");
   };
@@ -101,6 +105,10 @@ export default function ReelsPage() {
   );
   const allCollections = useMemo(
     () => [...new Set(reels.flatMap((r) => r.collections ?? []))].sort(),
+    [reels],
+  );
+  const allModels = useMemo(
+    () => [...new Set(reels.map((r) => r.model || r.backend).filter(Boolean))].sort(),
     [reels],
   );
 
@@ -127,6 +135,7 @@ export default function ReelsPage() {
       (!genre || r.genre === genre) &&
       (!account || r.author === account) &&
       (!collection || (r.collections ?? []).includes(collection)) &&
+      (!model || (model === "none" ? !(r.model || r.backend) : (r.model || r.backend) === model)) &&
       (status === "archived" ? r.archived : !r.archived) &&
       (status !== "starred" || r.starred) &&
       (status !== "unread" || !r.read) &&
@@ -141,7 +150,7 @@ export default function ReelsPage() {
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(r);
   }
   for (const items of groups.values()) items.sort(sortFn);
-  const filterActive = !!(q || tag || genre || account || collection || status !== "all" || period !== "all");
+  const filterActive = !!(q || tag || genre || account || collection || model || status !== "all" || period !== "all");
   const expQ = filterActive ? `?ids=${filtered.map((r) => r.id).join(",")}` : "";
   const categories = [...groups.entries()].sort((a, b) => {
     if (a[0] === "uncategorized") return 1;
@@ -203,6 +212,13 @@ export default function ReelsPage() {
             {allAccounts.map((a) => (
               <option key={a} value={a}>@{a}</option>
             ))}
+          </select>
+          <select value={model} onChange={(e) => setModel(e.target.value)} className={selCls} title="Which model wrote the record">
+            <option value="">All models</option>
+            {allModels.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+            <option value="none">(no provenance)</option>
           </select>
           <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className={selCls}>
             <option value="all">All</option>

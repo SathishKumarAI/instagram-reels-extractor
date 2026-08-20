@@ -102,6 +102,8 @@ export interface SearchHit {
   text: string;
   score: number;
   timestamp: number | null;
+  /** the shelves the hit's reel sits on */
+  collections: string[];
 }
 
 export interface Citation {
@@ -111,6 +113,8 @@ export interface Citation {
   score: number;
   snippet: string;
   timestamp: number | null;
+  /** the shelves the cited reel sits on */
+  collections: string[];
 }
 export interface Answer {
   answer: string | null;
@@ -243,6 +247,35 @@ export interface CompareResult {
     only_b?: string[];
   };
 }
+/** One stored variant, as the reader draws it (claim text only, no frames). */
+export interface VariantMeta {
+  name: string;
+  backend: string;
+  model: string;
+  summary: string;
+  tags: string[];
+  structured: Record<string, unknown>;
+  facts: string[];
+  elapsed_s: number | null;
+  cost_usd: number;
+  created_at: string;
+}
+/** Read-only diff of variants ALREADY on disk — no model runs, no cost. */
+export interface VariantsDiff {
+  reel_id: string;
+  available: string[];
+  a: string;
+  b: string;
+  variants: Record<string, VariantMeta>;
+  diff: {
+    a?: string;
+    b?: string;
+    shared?: { a: string; b: string; score: number }[];
+    only_a?: string[];
+    only_b?: string[];
+  };
+}
+
 export interface ScoreRow {
   backend: string;
   model: string;
@@ -310,6 +343,9 @@ export const api = {
   syncStatus: () => get<SyncStatus>("/api/sync/status"),
   profiles: () => get<VisionProfile[]>("/api/profiles"),
   // profile names, not the three fixed backends — any installed model can be an arm
+  // read-only: diffs what is stored. `compare` below re-runs the models and costs money.
+  variantsDiff: (id: string, a = "", b = "") =>
+    get<VariantsDiff>(`/api/reels/${id}/variants/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
   compare: (id: string, backends: string[] = ["claude-cli", "local"]) =>
     post<CompareResult>(`/api/reels/${id}/compare`, { backends }),
   scoreboard: () => get<Scoreboard>("/api/compare/scoreboard"),

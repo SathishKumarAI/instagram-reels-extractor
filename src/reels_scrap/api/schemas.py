@@ -60,6 +60,7 @@ class SearchHit(BaseModel):
     text: str
     score: float
     timestamp: float | None = None
+    collections: list[str] = []   # which shelf the hit came off — same as ReelSummary
 
 
 class ChatRequest(BaseModel):
