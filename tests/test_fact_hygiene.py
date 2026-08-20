@@ -116,6 +116,23 @@ def test_prompt_asks_for_caption_identifiers_verbatim():
     assert "SPONSORSHIP" in SCHEMA_INSTRUCTION and "state it as a fact" in SCHEMA_INSTRUCTION
 
 
+def test_ocr_text_reaches_the_prompt_capped_and_hedged():
+    """ocr.py wrote reel.ocr_text and nothing read it until 2026-08-20 — the stage
+    ran (23 reels carry 55-103 lines) and its output went nowhere."""
+    from reels_scrap.extract.prompts import OCR_LINES, prompt_header
+
+    r = Reel(id="X", url="https://ig/X", caption="c",
+             ocr_text=[f"LINE {i}" for i in range(OCR_LINES + 5)])
+    p = prompt_header(r)
+    assert "OCR" in p and "may contain errors" in p     # offered as a hint, not truth
+    assert f"LINE {OCR_LINES - 1}" in p                 # capped…
+    assert f"LINE {OCR_LINES}" not in p                 # …and the tail is dropped
+    assert "+5 more" in p                               # honestly, not silently
+
+    # no OCR stage ran -> not a word about OCR, rather than an empty section
+    assert "OCR" not in prompt_header(Reel(id="Y", url="https://ig/Y", caption="c"))
+
+
 def test_prompt_without_a_transcript_says_nothing_about_one():
     from reels_scrap.extract.vision import _prompt_header
 

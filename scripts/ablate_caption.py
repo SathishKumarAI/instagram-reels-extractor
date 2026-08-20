@@ -71,6 +71,24 @@ def caption_only_markers(reel: Reel) -> list[str]:
     return out
 
 
+def ocr_only_markers(reel: Reel) -> list[str]:
+    """Lines the OCR pass read that the caption and transcript do NOT contain.
+
+    Same idea as the caption markers, different input: if the model reproduces one
+    of these, it can only have come from the OCR block in the prompt (or from
+    reading the frame itself — which is exactly the comparison, since the blanked
+    arm still sees the frames).
+    """
+    elsewhere = _norm((reel.caption or "") + (reel.transcript_text or "") + (reel.title or ""))
+    out: list[str] = []
+    for line in reel.ocr_text or []:
+        n = _norm(line)
+        # short fragments ("D", "0%") match everything and prove nothing
+        if len(n) >= 8 and n not in elsewhere and n not in {_norm(o) for o in out}:
+            out.append(line.strip())
+    return out[:40]
+
+
 def variant_text(v: dict) -> str:
     parts = [v.get("summary") or "", " ".join(v.get("key_points") or [])]
     parts += [f.get("text", "") for f in v.get("facts") or []]
@@ -92,8 +110,10 @@ def main() -> None:
     ap.add_argument("--frame-width", type=int, default=0,
                     help="override extract.frame_max_width (0 = leave as configured)")
     ap.add_argument("--no-blind", action="store_true",
-                    help="skip the caption-blanked arm — halves the run when comparing "
-                         "two models or two resolutions rather than testing the caption")
+                    help="skip the blanked arm — halves the run when comparing "
+                         "two models or two resolutions rather than testing an input")
+    ap.add_argument("--blank", choices=("caption", "ocr"), default="caption",
+                    help="which input the blanked arm removes (default: caption)")
     ap.add_argument("--out", default="caption-ablation.json")
     args = ap.parse_args()
 
@@ -108,7 +128,8 @@ def main() -> None:
         cfg.extract.frame_max_width = args.frame_width
 
     # only reels where the question is answerable: a video to sample frames from
-    # AND at least one marker the caption alone carries
+    # AND at least one marker the input under test alone carries
+    markers_of = ocr_only_markers if args.blank == "ocr" else caption_only_markers
     cands: list[tuple[Reel, list[str]]] = []
     for p in sorted(cfg.data_dir.glob("*.json")):
         try:
@@ -117,19 +138,22 @@ def main() -> None:
             continue
         if not (r.video_path and (cfg.data_dir / r.video_path).exists()):
             continue
-        marks = caption_only_markers(r)
+        marks = markers_of(r)
         if marks:
             cands.append((r, marks))
     cands.sort(key=lambda rm: -len(rm[1]))
     cands = cands[: args.limit]
-    log.info("caption ablation: %d reels, model=%s (backend=%s), frames@%s",
-             len(cands), name, backend, cfg.extract.frame_max_width or "native")
+    log.info("%s ablation: %d reels, model=%s (backend=%s), frames@%s",
+             args.blank, len(cands), name, backend, cfg.extract.frame_max_width or "native")
 
     arms = ("with",) if args.no_blind else ("with", "without")
     rows = []
     for i, (reel, marks) in enumerate(cands, 1):
         blind = reel.model_copy(deep=True)
-        blind.caption = ""
+        if args.blank == "ocr":
+            blind.ocr_text = []
+        else:
+            blind.caption = ""
         subjects = {"with": reel, "without": blind}
         row: dict = {"id": reel.id, "markers": marks}
         for arm in arms:
