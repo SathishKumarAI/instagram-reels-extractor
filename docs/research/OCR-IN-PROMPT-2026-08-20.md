@@ -49,6 +49,14 @@ Two readings, both true:
 - 0.5 facts/reel is still a real cost. If facts matter more than verbatim small
   print for your use, leave OCR off — that is the shipped default.
 - easyocr is CPU-only here and adds seconds per reel before any of this applies.
-- Untested: whether feeding OCR to the *Claude* arm behaves the same, and whether
-  ordering the lines (by frame, instead of easyocr's order) removes the fact cost.
-  That is the next thing to try if anyone wants OCR on by default.
+- Untested: whether feeding OCR to the *Claude* arm behaves the same.
+- **Ordering is now built but still unmeasured (2026-08-25).** `ocr.order_detections`
+  sorts each frame's detections top-to-bottom then left-to-right, banding the y
+  coordinate so a few pixels of jitter does not split a row, and the prompt no
+  longer calls the block "unordered". Unit tests cover the sort; **the A/B that
+  would show whether it removes the 0.5 facts/reel has not been run.**
+  It is blocked on this machine, not merely undone: easyocr cannot import here —
+  `ImportError: DLL load failed while importing _flapack: An Application Control
+  policy has blocked this file` — so the 23 reels carrying `ocr_text` cannot be
+  re-OCR'd into the new order, and re-running `--blank ocr` would just re-measure
+  the old ordering. Needs a box where easyocr loads.

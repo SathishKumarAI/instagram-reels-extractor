@@ -2,7 +2,26 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-20 (on the **Windows** box, not the Rocky Linux one)
+- **Last touched:** 2026-08-25 (on the **Windows** box, not the Rocky Linux one)
+- **PR #15 open — OCR lines now come out in reading order.** `ocr.order_detections`
+  sorts each frame's detections top-to-bottom then left-to-right, banding the y
+  coordinate by half the frame's median text height so box jitter does not split a
+  row. Pure function, 4 tests, **144 pass** (was 140), ruff clean. The prompt no
+  longer calls the block "unordered".
+  - **The measurement that justifies it has NOT been run**, and cannot be on this
+    box: easyocr fails to import — `ImportError: DLL load failed while importing
+    _flapack: An Application Control policy has blocked this file` (Windows
+    Application Control blocking scipy's BLAS DLL). So the 23 reels carrying
+    `ocr_text` cannot be re-OCR'd into the new order, and `--blank ocr` would just
+    re-measure the old one. `extract.ocr` stays `false` everywhere. Needs a box
+    where easyocr loads.
+  - Written by **Qwen3.8-27B running locally** (RTX 5070 Ti, $0) through DeepSeek
+    Harness. Tests hand-written. Setup + measured numbers:
+    `~/coding/shelf/infra/deepseek/docs/`.
+- **Corrected a stale line in this file:** it said `ocr.py` writes `reel.ocr_text`
+  and *nothing reads it*, while the PR #13 row two screens up said that was fixed.
+  Checked the source, not the file: **PR #13 is right** — `extract/prompts.py:130`
+  reads it and caps it at `OCR_LINES = 15`. The finding was the lie.
 - **Where I stopped:** everything below is **merged to `main`** — PRs #8–#13, six
   squash merges, branches left on the remote (nothing deleted).
   **140 tests pass, ruff clean.** `tsc -b` not re-run: no frontend file changed all
@@ -52,9 +71,7 @@ Update this when you STOP working, not when you start.
   0.034). 3 of 11 reels lost a marker they had. Also found: `max_tokens: 1500` in
   `config-local.yaml` truncated 1 reel in 12 mid-JSON and all 3 attempts failed —
   now 4000. Full method + ceilings: `docs/research/CAPTION-ABLATION-2026-08-20.md`.
-- **Two live findings, neither fixed:**
-  - `extract/ocr.py` writes `reel.ocr_text` and **nothing reads it** — not the
-    prompt, not the index. 23 reels carry it. Wire it in or delete the stage.
+- **One live finding, still unfixed** (the other was already stale — see below):
   - `search._reel_document` indexes title/genre/summary/structured/transcript —
     **not** caption, `key_points` or `on_screen_text`. The identifiers just
     recovered land in `structured.links`, so they are indexed, but a rare exact

@@ -124,14 +124,19 @@ def prompt_header(reel: Reel) -> str:
             f"{spoken[:TRANSCRIPT_CHARS]}{'… [trimmed]' if len(spoken) > TRANSCRIPT_CHARS else ''}\n"
         )
     # OCR, when the stage ran. easyocr reads small print the VLM skims past — 55-103
-    # lines on a slide-heavy reel against the ~8 the model reports itself. It is
-    # noisy and unordered, so it is offered as a hint to check, never as truth:
+    # lines on a slide-heavy reel against the ~8 the model reports itself. Still
+    # noisy, so it is offered as a hint to check, never as truth:
     # `reel.ocr_text` was written by ocr.py and read by NOTHING until 2026-08-20.
+    # No longer unordered — ocr.order_detections sorts each frame's detections into
+    # reading order, so the cap below keeps the top of a slide, not an arbitrary
+    # slice of it. Whether that recovers the 0.5 facts/reel the block costs is
+    # unmeasured: see docs/research/OCR-IN-PROMPT-2026-08-20.md.
     ocr = [t for t in (reel.ocr_text or []) if t.strip()]
     if ocr:
         shown = ocr[:OCR_LINES]
         parts.append(
-            "\nText an OCR pass read off the frames (unordered, may contain errors — "
+            "\nText an OCR pass read off the frames (in reading order within each "
+            "frame, may contain errors — "
             "use it to catch small print you would otherwise miss, and ignore what the "
             f"frames contradict):\n{' | '.join(shown)}"
             f"{f' … [+{len(ocr) - len(shown)} more]' if len(ocr) > len(shown) else ''}\n"
