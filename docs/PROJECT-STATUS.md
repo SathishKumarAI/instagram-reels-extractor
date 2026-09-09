@@ -1,5 +1,9 @@
 # Project Status & Backlog — reels-scrap
 
+> **Historical — snapshot of 2026-07-11.** Corpus and status numbers here are long
+> out of date. Current state: [`../STATUS.md`](../STATUS.md). Current backlog:
+> [`BACKLOG-120.md`](BACKLOG-120.md).
+
 **Snapshot: 2026-07-11.** Feed for the local Kanban. Status legend:
 ✅ done · 🔨 in progress · 📋 backlog · ⛔ blocked (needs you).
 
@@ -98,3 +102,8 @@ optional **strictly-local** vision on your own GPU box.
 ## ⛔ Blocked on you
 1. **Export `cookies.txt`** → repo root → watcher auto-syncs (fresh reels).
 2. **GPU box `base_url`** → set in `config-local.yaml` → real local-vision run.
+
+## See also
+
+- [../STATUS.md](../STATUS.md) — the current one
+- [BACKLOG-120.md](BACKLOG-120.md) — the current backlog

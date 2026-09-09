@@ -1,5 +1,40 @@
 # Worklog
 
+## 2026-09-08 — Dead session found by a real sync · README rewritten around `sync` · docs index, access guide, formatting pass
+
+**Ran a sync, and it failed the way the docs did not describe.** Local-GPU sync on
+`config-local.yaml`: GPU free (1.7/16 GB, 15 %, no foreign model), `reels-vision`
+resident, cookie probe **failed**, and all **20 of 20 sources** returned
+`Exceeded 30 redirects.` — 0 reels ingested. `cookies.txt` was 19.6 days old with a
+`sessionid` claiming expiry 2027-08-04; Instagram had invalidated it server-side, so
+the file's own timestamp proved nothing. Re-export is the fix.
+
+**Bug filed, not fixed (COD-177):** `cli/sources.py` prints "every source will fail
+until this is fixed" and then calls `poll_all()` anyway, producing the exact 20
+identical errors the probe exists to prevent and spending 20 Instagram requests while
+logged out. The GPU guard three lines above raises `Exit(3)`; this one returns nothing.
+
+**Docs (COD-176).** The README documented `reels-scrap run` on a Linux venv and never
+mentioned `sync`, `sources.json`, the local-GPU path, the GPU guard, the exit codes or
+the `--missing-vision` repair pass — i.e. it described a workflow nobody here uses.
+
+| File | Change |
+|---|---|
+| `README.md` | Rewritten around `sync`. Claude vs local comparison with the measured numbers, config-profile table, symptom table, three-layer privacy section, docs map |
+| `docs/INSTAGRAM-ACCESS.md` | **New.** Four session approaches compared by blast radius, export steps, hardening checklist (permissions, cloud-sync folders, backups, rotation), the expiry symptom and what it means |
+| `docs/README.md` | **New.** Index by task, per-doc "what it answers", the code-level `change → file` maps, a *how decisions get made* section, the two open owner decisions, external resources, house style |
+| `docs/USAGE.md` | Corrected against `--help` and the real defaults (`ocr: false`, `whisper_model: large-v3`, `vision_local.*`, exit codes). Added every sync flag and the research commands |
+| `docs/PRIVACY.md` | New "ignoring your own files" procedure — rule in the same edit, ignore the copies, `git check-ignore -v`, `git rm --cached`, rotate what was pushed |
+| `docs/SETUP.md` | `.venv-win`/`PYTHONUTF8` note, link to the access guide, See-also footer |
+| 5 superseded docs | Banner naming what replaced them (`SUMMARY`, `TICKETS`, `PROJECT-STATUS`, `BACKLOG`, `BACKLOG-50`) |
+| 22 docs | `See also` footers, so no page is a dead end |
+
+**Verified:** 140 tests pass · `scrub-personal.py --check` → `0 file(s) would be
+scrubbed` (it caught a real collection name I had pasted into the new access doc from
+the sync output — stand-in now) · a link check over all 95 markdown files reports **0
+broken relative links** · ruff reports 2 pre-existing `RUF100` in `app.py`, untouched
+by this branch.
+
 ## 2026-07-11 23:30 — Finish extraction · UI (cards/Back/date/collection/Reader) · claude-only default · dual vision backend (local Kimi-VL) · backlogs
 
 **Session span:** 2026-07-09 → 2026-07-11. Driven entirely from Claude Code.
@@ -646,3 +681,8 @@ in history, personal collection names scrubbed from 14 tracked files +
 Model-provenance badges everywhere, per-reel local-vs-cloud diff in the reader, and
 **collection tags on every reel** (`front-end`, `topic-books`, `ai` — the tags you
 actually think in, as opposed to `educational`). Documented, not started.
+
+## See also
+
+- [../STATUS.md](../STATUS.md) — where work stopped and what is next
+- [README.md](README.md) — the documentation index

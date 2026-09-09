@@ -298,3 +298,9 @@ P0 only, in this order — every one is S effort and removes a live annoyance:
 
 Then Phase 2 (C3, D1-D5) decides whether local becomes the default backend, using
 numbers rather than the current three-reel sample.
+
+## See also
+
+- [PLAN-2026-08.md](PLAN-2026-08.md) — the phasing
+- [../STATUS.md](../STATUS.md) — what has shipped since
+- [README.md](README.md) — the documentation index

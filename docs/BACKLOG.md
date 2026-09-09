@@ -1,5 +1,8 @@
 # Feature Backlog — reels-scrap
 
+> **Superseded by [`BACKLOG-120.md`](BACKLOG-120.md).** Kept because the
+> value ÷ effort reasoning behind these items is still the reasoning used.
+
 Prioritized by **value ÷ effort**, grouped into shipping tiers. Status: ☐ todo · ◑ in progress · ☑ done.
 
 The research platform itself (ingest → extract → structure → render → search → API → UI)
@@ -64,3 +67,7 @@ Next, to make it a genuinely usable product:
 - **#2 unblocks everything runnable** — do it first so the pipeline + suite run locally and in CI (#10).
 - **#4 (transcript quality) is the biggest correctness win** — the docs are only as trustworthy as the extraction; bad transcripts poison summaries/facts.
 - #7–#11 all build cleanly on the manifest layer added in #1 — no rework needed.
+
+## See also
+
+- [BACKLOG-120.md](BACKLOG-120.md) — the current list

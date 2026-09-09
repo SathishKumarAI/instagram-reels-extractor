@@ -130,3 +130,9 @@ PYTHONUTF8=1 .venv-win/Scripts/python.exe scripts/ablate_caption.py -c config-lo
 
 Writes `output/bench/<name>.json` — summary (including `by_kind`) plus per-reel rows
 and the exact markers hit. Release the GPU between arms (`bench._release_gpu(cfg)`).
+
+## See also
+
+- [../../src/reels_scrap/extract/README.md](../../src/reels_scrap/extract/README.md) — where the prompt lives
+- [OCR-IN-PROMPT-2026-08-20.md](OCR-IN-PROMPT-2026-08-20.md) — the sibling measurement
+- [../../.claude/skills/measuring-extraction-changes/SKILL.md](../../.claude/skills/measuring-extraction-changes/SKILL.md) — how to run this harness

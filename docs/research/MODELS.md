@@ -130,3 +130,9 @@ Ollama: <https://ollama.com/library/deepseek-ocr>
 
 VRAM is the ceiling: 16.3GB, one model resident at a time. The runner serialises
 arms and releases the GPU between them.
+
+## See also
+
+- [BENCH-2026-08-06.md](BENCH-2026-08-06.md) — how these models actually scored
+- [../LOCAL-VISION.md](../LOCAL-VISION.md) — serving one yourself
+- [COSTS.md](COSTS.md) — what "free" means here

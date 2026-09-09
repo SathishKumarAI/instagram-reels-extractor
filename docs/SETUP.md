@@ -24,6 +24,11 @@ removes even that.
 .\scripts\setup-windows.ps1 -Autostart   # …plus API at logon
 ```
 
+The script creates **`.venv-win`**, not `.venv` — the latter is a Linux venv left from
+the old box. Every command afterwards runs as
+`$env:PYTHONUTF8=1; .venv-win\Scripts\python.exe -m reels_scrap.cli <command>`; without
+`PYTHONUTF8` Windows reads files as cp1252 and chokes on an emoji caption.
+
 **Linux / macOS**:
 
 ```bash
@@ -54,6 +59,12 @@ closing Chrome does not help. Export instead:
 > until you log out. It is gitignored and blocked by the pre-commit hook. Never
 > paste it into a chat, an issue, a screenshot or a log. Rotate by logging out.
 > Full rules: [`PRIVACY.md`](PRIVACY.md).
+
+There are **four** ways to hand this tool a session — exported cookies, live browser
+extraction, an instaloader session outside the repo, or no auth at all for public reels.
+They differ in where the secret rests and what a leak costs. Compare them, harden the
+file, and learn the expiry symptom in
+[`INSTAGRAM-ACCESS.md`](INSTAGRAM-ACCESS.md).
 
 ## 3. Tell it what to read
 
@@ -137,3 +148,11 @@ the Discover tab.
 Instagram rate-limits hard. Every run has a request budget, sleeps ~3s between
 calls, and **stops on the first HTTP 429**. Discovery reads more of Instagram
 than you do by hand — that is why it is opt-in and capped. Keep it that way.
+
+## See also
+
+- [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md) — the four session approaches, hardening, expiry
+- [SYNC.md](SYNC.md) — what a sync run does, and the two-track environment
+- [USAGE.md](USAGE.md) — every command and config knob
+- [PRIVACY.md](PRIVACY.md) — keeping your data out of git
+- [../docs/README.md](README.md) — the full documentation index

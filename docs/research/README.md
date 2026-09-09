@@ -36,3 +36,9 @@ build step, and the measured results.
   quietly thinner average.
 - **The bench does not decide.** It produces evidence; changing the default
   production backend is a separate, deliberate change.
+
+## See also
+
+- [MODELS.md](MODELS.md) · [COSTS.md](COSTS.md) · [UI-TABS.md](UI-TABS.md)
+- [BENCH-2026-08-06.md](BENCH-2026-08-06.md) — the current results
+- [../README.md](../README.md) — the documentation index

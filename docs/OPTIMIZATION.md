@@ -78,3 +78,10 @@ free-but-slow, so there levers 2+3 mainly buy **speed**; on API they buy **cost*
 - **Skip re-work**: backfill skips reels that already have tags (idempotent).
 - **Privacy note**: api and claude-cli both send frames to Anthropic — the one egress
   point. `extract.vision: false` for a fully local run (see `docs/PRIVACY.md`).
+
+## See also
+
+- [SCALING.md](SCALING.md) — throughput, not cost
+- [research/COSTS.md](research/COSTS.md) — where every cost figure is produced
+- [LOCAL-VISION.md](LOCAL-VISION.md) — the $0 path
+- [USAGE.md](USAGE.md#extract--which-extractors-run) — the knobs named here

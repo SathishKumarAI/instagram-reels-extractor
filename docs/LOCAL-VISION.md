@@ -73,3 +73,10 @@ endpoint is down or returns malformed JSON, the reel **falls back to `claude-cli
 so it still gets extracted — and that fallback is logged (`… falling back to
 claude-cli (frames egress to Claude)`). Set `vision_local_fallback: false` to
 dead-letter instead and keep the machine strictly local.
+
+## See also
+
+- [research/MODELS.md](research/MODELS.md) — what each model is and how it reads a reel
+- [research/BENCH-2026-08-06.md](research/BENCH-2026-08-06.md) — the measured comparison
+- [SETUP.md](SETUP.md#5-local-vision-on-your-own-gpu) — installing the local model
+- [PRIVACY.md](PRIVACY.md#data-egress--the-one-external-call) — why local vision closes the one egress point

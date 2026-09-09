@@ -158,3 +158,9 @@ citations. Only worth doing once A and C are real.
 
 Every item here is in `docs/BACKLOG-120.md` (Epics N-Q) so nothing depends on this
 conversation surviving.
+
+## See also
+
+- [research/CAPTION-ABLATION-2026-08-20.md](research/CAPTION-ABLATION-2026-08-20.md) — the caption question, measured
+- [research/OCR-IN-PROMPT-2026-08-20.md](research/OCR-IN-PROMPT-2026-08-20.md) — the OCR stage that wrote to nothing
+- [PLAN-2026-08.md](PLAN-2026-08.md) — what this diagnosis turned into

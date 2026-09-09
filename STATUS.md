@@ -2,8 +2,33 @@
 
 Update this when you STOP working, not when you start.
 
-- **Last touched:** 2026-08-20 (on the **Windows** box, not the Rocky Linux one)
-- **Where I stopped:** everything below is **merged to `main`** — PRs #8–#13, six
+- **Last touched:** 2026-09-08 (on the **Windows** box, not the Rocky Linux one)
+- **The Instagram session is dead — sync cannot run until it is re-exported.**
+  A local-vision sync on 2026-09-08 failed **20 of 20 sources** with
+  `Exceeded 30 redirects.` and ingested nothing. `cookies.txt` was 19.6 days old and
+  its `sessionid` row *claims* expiry 2027-08-04 — the invalidation is server-side, so
+  the file's own timestamp is not evidence. Re-export `cookies.txt` (see
+  `docs/INSTAGRAM-ACCESS.md`) and re-run; sync is incremental, nothing was lost.
+  The GPU was free (1.7/16GB, 15%, no foreign model) and `reels-vision` was resident —
+  this was purely auth.
+- **Filed, not fixed: the cookie probe warns and then runs anyway** (COD-177).
+  `cli/sources.py` calls `session_ok()`, prints "every source will fail until this is
+  fixed", and then calls `poll_all()` regardless — producing exactly the 20 identical
+  errors its own comment says it exists to prevent, and spending 20 Instagram requests
+  while logged out. The GPU guard beside it raises `Exit(3)`; this one should too.
+- **Docs pass done 2026-09-08** (COD-176, branch `docs/readme-and-docs-index`):
+  README rewritten around `sync` (the old one documented `reels-scrap run` on a Linux
+  venv and never mentioned sync, `sources.json`, the local-GPU path, the GPU guard or
+  the `--missing-vision` repair pass); new `docs/INSTAGRAM-ACCESS.md` (four ways to
+  hand it a session, blast radius of each, hardening, the expiry symptom); new
+  `docs/README.md` index that marks which docs are historical and records how
+  decisions get made here; `USAGE.md` corrected against `--help` and the real config
+  defaults; `PRIVACY.md` gained the "ignoring your own files" procedure. Five
+  superseded docs carry a banner, 22 gained a `See also` footer.
+  **140 tests pass, 0 broken relative links across 95 markdown files,
+  `scrub-personal.py --check` clean.** Pre-existing and untouched: ruff reports 2
+  `RUF100` in `app.py` (a newer ruff no longer enables `BLE001`).
+- **Where I stopped (previous session):** everything below is **merged to `main`** — PRs #8–#13, six
   squash merges, branches left on the remote (nothing deleted).
   **140 tests pass, ruff clean.** `tsc -b` not re-run: no frontend file changed all
   session.

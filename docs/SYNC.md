@@ -112,3 +112,10 @@ bash scripts/install-extraction.sh    # CPU-only torch wheels + easyocr
 
 The script pins the PyTorch **CPU** wheel index (`download.pytorch.org/whl/cpu`) so
 it pulls ~200 MB, not the multi-GB CUDA build.
+
+## See also
+
+- [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md) — the session a sync run needs
+- [USAGE.md](USAGE.md) — every `sync` flag and every config knob
+- [SETUP.md](SETUP.md) — the install these environments come from
+- [README.md](README.md) — the documentation index
