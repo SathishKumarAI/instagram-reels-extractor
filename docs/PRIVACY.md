@@ -55,6 +55,9 @@ That file contains your `sessionid`. Treat it exactly like your password:
 - **Never** paste it into a chat, an issue, a screenshot, a log, or a bug report.
 - Rotate it by logging out of Instagram — that invalidates every copy at once.
 - Re-export when sync suddenly fails on every source; that is expiry, not a bug.
+  The symptom is `Exceeded 30 redirects.` on all of them, and the expiry timestamp
+  inside the file proves nothing — the session is invalidated server-side. Full
+  walkthrough: [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md#when-it-expires).
 
 ## Guard rails (enabled per clone)
 
@@ -69,6 +72,53 @@ or reel media / `data/` / `output/` files — including via `git add -f`.
 
 Verified 2026-08-04: `git log --all -- cookies* .env *.session*` is empty. No
 credential has ever been committed to this repo.
+
+## Ignoring your own files — the practical part
+
+`.gitignore` already covers everything in the table above. This is what to do when you
+add something new.
+
+**1. Write the ignore rule in the same edit that creates the file.** Not afterwards —
+one `git add -A` in between is all it takes.
+
+```gitignore
+# PRIVATE: <one line saying what this is and why it must never be committed>
+my-new-list.txt
+my-new-list*.bak
+```
+
+**2. Ignore the copies too.** A `.bak`, a `.orig`, a dated export, a `.zip` of the repo —
+a backup of a secret is still a secret, and a backup of personal data is still personal
+data. This repo ignores `cookies*.bak` and `*.bak` for exactly that reason.
+
+**3. Verify, do not assume.** Two commands, both cheap:
+
+```bash
+git check-ignore -v path/to/file     # prints the rule that ignores it, or exits 1
+git status --porcelain               # must show nothing personal before you commit
+```
+
+`git check-ignore` exiting 1 means the file is **not** ignored — that is the failure you
+want to catch here, not in a push.
+
+**4. If it is already tracked, ignoring it does nothing.** `.gitignore` only applies to
+untracked files. Untrack it first, in the same commit as the rule:
+
+```bash
+git rm --cached path/to/file
+```
+
+**5. If a credential ever reached a remote, rotate it — do not just rewrite history.**
+Log out of Instagram (invalidating every copy of the `sessionid`), or revoke the API
+key. Assume anything pushed was read; a force-push cleans the repo, not the internet.
+
+**6. Names leak too.** Real collection names can reveal a health condition or a job
+search. Tracked docs use stand-ins, and `scripts/scrub-personal.py --check` exits 1 if a
+real one comes back:
+
+```bash
+python scripts/scrub-personal.py --check     # CI-gateable; 0 file(s) would be scrubbed
+```
 
 ## Before making the repo public
 
@@ -95,3 +145,9 @@ credential has ever been committed to this repo.
 5. Ship `*.example.*` templates for anything personal; gitignore the real file.
 6. Before any commit/push: `git status` must show **no** `data/`, `output/`,
    `sources.json`, or reel-list files staged. The hook enforces this, but check.
+
+## See also
+
+- [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md) — session approaches, hardening and rotation
+- [SETUP.md](SETUP.md) — where the guard rails get enabled
+- [../README.md](../README.md#your-data-stays-yours) — the three layers, summarised

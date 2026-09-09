@@ -76,3 +76,8 @@ under a cent — and always shows the per-reel figure beside the total.
 
 Related: [`BENCH-2026-08-05.md`](BENCH-2026-08-05.md) for what that money bought,
 and [`MODELS.md`](MODELS.md) for what each model is.
+
+## See also
+
+- [BENCH-2026-08-06.md](BENCH-2026-08-06.md) — the measured $/reel
+- [../OPTIMIZATION.md](../OPTIMIZATION.md) — how to spend less

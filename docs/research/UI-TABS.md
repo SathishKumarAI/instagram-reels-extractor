@@ -134,3 +134,8 @@ cd web && npm run build
 
 Related: [`MODELS.md`](MODELS.md) for the models behind the badges,
 [`COSTS.md`](COSTS.md) for the money column, `docs/SETUP.md` for a clean install.
+
+## See also
+
+- [../ARCHITECTURE.md](../ARCHITECTURE.md#backendfrontend-json-contract) — the API behind the tabs
+- [../../src/reels_scrap/api/README.md](../../src/reels_scrap/api/README.md) — which file owns which route

@@ -1,5 +1,8 @@
 # 50-Feature Backlog — Reels Research Platform
 
+> **Superseded by [`BACKLOG-120.md`](BACKLOG-120.md).** Kept for history — the
+> epic structure here is where the current 12 epics came from.
+
 Architected as 10 epics × 5 features. Priority **P0** (now) → **P3** (later);
 Effort **S/M/L**; Value ★–★★★. `dep:` = prerequisite feature id. Build order follows
 priority then dependency. Status: ☐ todo · ◑ wip · ☑ done.
@@ -126,3 +129,7 @@ Done (**21/50**): A1, A3, C1, C2, C3, C5, D2, E1, F1, F2, F3, G1, G2, H1, H4, I1
   **D5** "surprise me" random reel. Running total: **31/50**.
 Next: D3 saved searches, E5 kanban-by-status, H5 model picker; then P3 (local-LLM
 vision, encryption, webhooks, Notion, calendar).
+
+## See also
+
+- [BACKLOG-120.md](BACKLOG-120.md) — the current list

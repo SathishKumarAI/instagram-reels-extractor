@@ -1,153 +1,231 @@
 # Usage
 
-> Install the platform, run the easy three-command flow, and tune everything through `config.yaml` — all local, no API key required.
-
-The whole platform is driven by one CLI (`reels-scrap`) plus a config file. The happy path is three commands: **fetch a collection → run the pipeline → serve the UI**.
+> Every command, every config knob, and the symptom table. The whole platform is one
+> CLI plus a config file; the command you will actually run most days is `sync`.
 
 ## Install
 
-No sudo needed — a static ffmpeg ships via pip.
+**Windows** — [`scripts/setup-windows.ps1`](../scripts/setup-windows.ps1) does the whole
+thing (venv, deps, web build, git hooks, local model, tests). Afterwards, every command
+takes this shape:
 
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e .
+```powershell
+$env:PYTHONUTF8=1
+.venv-win\Scripts\python.exe -m reels_scrap.cli <command>
 ```
 
-> First transcript/OCR/search run downloads local models one time (Whisper ~150 MB, easyocr, fastembed ~130 MB). `./setup.sh` is optional (system ffmpeg/tesseract via dnf).
+Use `.venv-win`, not `.venv` — the latter is a Linux venv from the old box. `PYTHONUTF8`
+is not optional: a few file reads still lack an explicit encoding, and Windows defaults
+to cp1252, which cannot read this project's own JSON back.
 
-**Vision needs the Claude CLI.** Vision and chat default to `claude-cli` (your subscription, no key). Make sure `claude` is on your `PATH` and logged in. To use the Anthropic API instead, set the backend to `api` and export `ANTHROPIC_API_KEY` (see [DEPLOY.md](DEPLOY.md)).
-
-## The easy flow
+**Linux / macOS** — the console script works directly:
 
 ```bash
-reels-scrap fetch-collection <url>     # named saved collection → reels.txt
-reels-scrap run                        # ingest → … → index → knowledge
-reels-scrap serve                      # FastAPI backend + React UI on one port
+python3.12 -m venv .venv && . .venv/bin/activate
+pip install -e ".[cpu]"        # torch-free: transcript + vision + pdf + docs + dev
+reels-scrap --help
 ```
 
-One command per stage; `run` chains them; everything is resumable — re-running `run` only redoes incomplete stages (resume-by-sidecar).
+> First transcript/search run downloads local models once (Whisper, fastembed ~130 MB).
+> `pip install -e .` alone is lean by design — see the
+> [extras table](SYNC.md#environments--two-track-gated-by-extras).
 
-> **Beyond the easy flow:** `reels-scrap knowledge` rebuilds the aggregated Knowledge Base (add `--synthesize` for cached Claude topic overviews), and `reels-scrap ask "<question>"` runs the RAG research chat from the CLI (cited answers). `serve` exposes both through the web UI.
+**Vision needs a backend.** Either the Claude Code CLI (`claude` on `PATH`, logged in —
+no API key) or a local Ollama endpoint (`config-local.yaml`). `ANTHROPIC_API_KEY` +
+`vision_backend: api` is the third option; see [DEPLOY.md](DEPLOY.md).
 
-## CLI commands
+## The everyday flow
 
-All commands take `--config / -c` (default `config.yaml`).
+```bash
+reels-scrap add-source "https://www.instagram.com/<you>/saved/<name>/<id>/"   # once per collection
+reels-scrap sync -c config-local.yaml                                        # every run
+reels-scrap serve                                                            # read it
+```
+
+Sync is idempotent and incremental: re-run any time, nothing already downloaded is
+fetched again, failures dead-letter with a reason. Sessions come from
+[INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md).
+
+## Commands
+
+All take `--config / -c` (default `config.yaml`).
+
+### Sources and sync — what you use
 
 | Command | What it does | Example |
-|---------|--------------|---------|
-| `run` | Full pipeline: ingest → extract → structure → render → index → knowledge. Resumable. | `reels-scrap run -c config.yaml` |
-| `fetch-collection <url>` | Enumerate a named saved collection into reel URLs (browser cookies, no password), one per line to `--out` (default `reels.txt`). | `reels-scrap fetch-collection https://... -b chrome` |
-| `serve` | Launch the FastAPI backend + React UI on one port (`--host`/`--port`/`--reload`). | `reels-scrap serve -p 8000` |
-| `knowledge` | Rebuild the aggregated Knowledge Base; `--synthesize` adds cached Claude topic overviews. | `reels-scrap knowledge --synthesize` |
-| `ask "<question>"` | RAG research chat from the CLI — cited answer + sources (`-k` for retrieval depth). | `reels-scrap ask "system design caching" -k 8` |
-| `ingest-cmd` | Download media + metadata only. | `reels-scrap ingest-cmd` |
-| `extract-cmd` | Re-run extractors on already-ingested reels (no re-download). | `reels-scrap extract-cmd` |
-| `render-cmd` | Re-render markdown + PDF + site from existing reel data. | `reels-scrap render-cmd` |
-| `index` | Build/refresh the local semantic index over all reels. | `reels-scrap index` |
-| `search "<query>"` | Semantic search across the archive (`-k` for result count). | `reels-scrap search "system design caching" -k 8` |
-| `login <username>` | Create a local Instagram session (instaloader). Password/2FA stay on your machine. | `reels-scrap login myhandle` |
+|---|---|---|
+| `sync` | Poll every enabled source, dedup against the pool, ingest only new reels, refresh docs + index + state. | `sync -c config-local.yaml` |
+| `sync --only <name>` | Limit to named source(s); repeatable. | `sync --only saved-all` |
+| `sync --retry-failed` | Re-attempt dead-lettered **ingest** failures. | `sync -c config.yaml --retry-failed` |
+| `sync --backend <b>` | Override the vision backend for one run: `claude-cli` \| `api` \| `local`. | `sync --backend local` |
+| `sync --claude-only` | Skip CPU whisper + OCR, vision only — much faster. `--full` flips back. | `sync --claude-only` |
+| `add-source <url>` | Register a source in `sources.json`. | `add-source <url> --name topic-research --type collection` |
+| `list-sources` | Show what is registered and enabled. | `list-sources` |
+| `discover` | Propose reels from creators you already save and your top tags. Opt-in, budgeted, stops on the first 429. | `discover --browser cookies.txt --max-requests 40` |
+| `login <user>` | Create a local instaloader session. Password and 2FA stay on your machine. | `login myhandle` |
 
-> **Why separate stage commands:** each stage reads/writes the per-reel JSON record, so you can re-run `extract-cmd` after tweaking `whisper_model` without re-downloading, or `render-cmd` after editing a template — without paying for vision again.
+### Pipeline stages — when you need one in isolation
+
+| Command | What it does | Example |
+|---|---|---|
+| `run` | Full pipeline for the configured source: ingest → extract → structure → render. Resumable. | `run -c config.yaml` |
+| `ingest-cmd` | Download media + metadata only. | `ingest-cmd` |
+| `extract-cmd` | Re-run extractors on already-ingested reels — no re-download. | `extract-cmd -c config-local.yaml` |
+| `extract-cmd --missing-vision` | **The repair pass.** Only reels with no summary and a video on disk. | `extract-cmd -c config-local.yaml --missing-vision` |
+| `render-cmd` | Re-render markdown + PDF + site from existing records. | `render-cmd` |
+| `index` | Build/refresh the semantic index (incremental; `--full` forces a rebuild). | `index` |
+| `knowledge` | Rebuild the aggregated Knowledge Base; `--synthesize` adds cached Claude topic overviews. | `knowledge --synthesize` |
+
+> **Why separate stage commands:** every stage reads and writes the same per-reel JSON,
+> so you can re-run `extract-cmd` after changing a prompt without re-downloading, or
+> `render-cmd` after editing a template — without paying for vision again.
+
+**`--retry-failed` does not cover a failed vision.** That reel is downloaded, so `sync`
+no longer counts it as new and will never revisit it; it stays summary-less until
+`extract-cmd --missing-vision` looks for it.
+
+### Reading the archive
+
+| Command | What it does | Example |
+|---|---|---|
+| `search "<query>"` | Semantic search across summaries, structured fields, transcripts and facts. | `search "system design caching" -k 8` |
+| `ask "<question>"` | RAG answer with citations, from the CLI. | `ask "what did I save about pickleball dinks"` |
+| `serve` | FastAPI backend + built UI on one port (`--host`/`--port`/`--reload`). Binds `127.0.0.1`. | `serve -p 8000` |
+| `collection <url>` | Saved collection → fetch, extract new, build a self-contained HTML doc, open it. Idempotent. | `collection <url>` |
+| `fetch-collection <url>` | Enumerate a collection into reel URLs (`--out`, default `reels.txt`). | `fetch-collection <url> -b chrome` |
+| `consolidate` | Rebuild every collection document + index from already-extracted data. | `consolidate` |
+
+### Research
+
+| Command | What it does | Example |
+|---|---|---|
+| `models list` | Installed vs available local vision models. Touches no network. | `models list` |
+| `models pull <name>` | Explicit pull + rebuild at 32k context. Never automatic. | `models pull qwen3vl-8b` |
+| `bench sample -n 30 --seed 0` | One fixed, genre-stratified sample, reused by every arm. | |
+| `bench run --profile <p>` | Resumable, one model resident at a time; failures become error rows. | |
+| `bench report` | Metrics + the written why-they-differ pass → `docs/research/BENCH-<date>.md`. | |
+
+### Exit codes
+
+Load-bearing — the scheduled sync distinguishes them.
+
+| Code | Means |
+|---|---|
+| `0` | done |
+| `1` | nothing to do (no enabled sources, no reels ingested) |
+| `2` | invalid flag or missing config for the chosen backend |
+| `3` | GPU busy before the run, or contended during it |
 
 ## Where inputs and outputs land
 
 | Kind | Path | Notes |
-|------|------|-------|
-| URL list | `reels.txt` | what you feed in (one reel URL per line) |
-| Per-reel record (truth) | `data/<id>.json` | rebuildable everything-from-here |
-| Downloaded media | `data/<id>...` | mp4 / jpg / wav / `<id>_frames/` |
+|---|---|---|
+| Source registry | `sources.json` | **gitignored** — names your private collections |
+| URL list | `reels.txt` | one reel URL per line, when `source.type: urls` |
+| Per-reel record (truth) | `data/<id>.json` | everything else is rebuildable from here |
+| Downloaded media | `data/<id>…` | mp4 / jpg / wav / `<id>_frames/` |
 | Model + session cache | `data/cache/` | whisper, fastembed, IG session |
 | Markdown | `output/markdown/<id>.md` | genre, structured fields, provenance table |
-| PDF | `output/pdfs/<id>.pdf` | per-reel professional PDF |
-| Static site | `output/site/index.html` | mkdocs master index → every reel + PDF |
+| PDF | `output/pdfs/<id>.pdf` | per-reel |
+| Static site | `output/site/index.html` | mkdocs master index |
+| Collection docs | `output/collections/<slug>.html` | self-contained, thumbnails embedded |
 | Knowledge | `output/knowledge/knowledge.json` + `<topic>.json` | aggregated topics |
-| Search index | `output/index/search_index.{npz,json}` | local semantic index |
-| Logs + manifest | `output/logs/run.log`, `run_report.json` | per-reel, per-stage success/error |
+| Search index | `output/index/search_index.{npz,json}` | local, incremental |
+| Logs + manifest | `output/logs/run.log`, `run_report.json` | per-reel, per-stage; `run.log` rotates 5 MB × 3 |
 
-> **Inputs (`data/`) and outputs (`output/`) are deliberately separated** so you can wipe `output/` to force a clean rebuild without re-downloading anything. The derived sub-dirs hang off `Config`'s `knowledge_dir` / `index_dir` / `logs_dir` properties — see [ARCHITECTURE.md](ARCHITECTURE.md#directory-layout--inputs-vs-outputs).
+> **Inputs and outputs are deliberately separated:** wipe `output/` to force a clean
+> rebuild without re-downloading anything. Derived sub-dirs hang off `Config`'s
+> `knowledge_dir` / `index_dir` / `logs_dir` properties — see
+> [ARCHITECTURE.md](ARCHITECTURE.md#directory-layout--inputs-vs-outputs).
 
-## config.yaml knobs
+## Config reference
 
-The config toggles every stage. Full reference:
+Defaults below are `config.yaml`'s. The other profiles differ where noted in
+[../README.md](../README.md#config-profiles).
 
 ### `source` — what to pull
 
 | Key | Default | Meaning |
-|-----|---------|---------|
+|---|---|---|
 | `type` | `urls` | `urls` \| `profile` \| `hashtag` \| `saved` |
 | `urls_file` | `reels.txt` | one reel URL per line (when `type=urls`) |
 | `target` | `""` | profile handle (no `@`) or hashtag (no `#`) |
-| `login` | `false` | use a logged-in IG session (ToS risk, rate limits) |
+| `login` | `false` | use a logged-in instaloader session |
 | `username` | `""` | IG username when `login=true` |
 | `limit` | `50` | max reels for profile/hashtag/saved |
+
+`sync` reads `sources.json` instead of this block — `source` applies to `run`,
+`ingest-cmd` and the single-source commands.
 
 ### `auth` — private reel access
 
 | Key | Default | Meaning |
-|-----|---------|---------|
-| `cookies_from_browser` | `chrome` | `firefox` \| `chrome` \| `brave` \| `edge` — must be logged into IG |
-| `cookies_file` | `""` | OR a path to exported `cookies.txt` |
-| `browser_profile` | `""` | optional named browser profile |
+|---|---|---|
+| `cookies_from_browser` | `chrome` | `firefox` \| `chrome` \| `brave` \| `edge` — Linux/macOS only |
+| `cookies_file` | `""` | path to an exported Netscape `cookies.txt` — **the Windows path** |
+| `browser_profile` | `Default` | name it; otherwise yt-dlp picks the most-recently-used profile |
 
-> On Linux, Chrome cookie import needs `secretstorage` (bundled) and the **browser closed** while running.
+Full comparison and the security rules: [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md).
 
 ### `extract` — which extractors run
 
 | Key | Default | Meaning |
-|-----|---------|---------|
+|---|---|---|
 | `caption` | `true` | caption + hashtags + mentions + stats (free, from metadata) |
-| `transcript` | `true` | spoken audio → text via faster-whisper (local) |
-| `ocr` | `true` | on-screen text via easyocr on sampled frames |
-| `vision` | `true` | AI visual summary + genre-typed fields |
-| `vision_backend` | `claude-cli` | `claude-cli` (subscription, no key) \| `api` |
-| `whisper_model` | `base` | `tiny` \| `base` \| `small` \| `medium` \| `large-v3` |
+| `transcript` | `true` | spoken audio → text, faster-whisper (local, CTranslate2 — not torch) |
+| `ocr` | `false` | on-screen text via easyocr; needs torch. Up to `OCR_LINES = 15` lines reach the prompt when on |
+| `vision` | `true` | genre + typed fields + provenance facts |
+| `vision_backend` | `claude-cli` | `claude-cli` \| `api` \| `local` \| `auto` |
+| `vision_local.base_url` | — | OpenAI-compatible endpoint, e.g. `http://127.0.0.1:11434/v1` |
+| `vision_local.model` | — | e.g. `reels-vision` (built by `scripts/ollama-vision.Modelfile`) |
+| `vision_local.timeout` | `240` | seconds; 6 frames at 720px on a 7B q8 |
+| `vision_local.max_tokens` | `4000` | measured: 1500 truncated 1 reel in 12 mid-JSON, and every retry failed identically |
+| `vision_local_fallback` | `true` | `false` = strict local, never egress; failures dead-letter |
+| `whisper_model` | `large-v3` | `tiny` \| `base` \| `small` \| `medium` \| `large-v3` |
 | `whisper_device` | `auto` | `auto` \| `cpu` \| `cuda` |
-| `whisper_language` | `en` | `""` = auto-detect; `en` forces English (less hallucination) |
-| `vision_model` | `claude-sonnet-4-6` | `claude-opus-4-8` for max quality |
-| `frame_every_sec` | `2` | sample 1 frame every N seconds for OCR/vision |
-| `vision_concurrency` | `1` | parallel `claude -p` vision calls (semaphore-bounded; keep at 1–2 on the CLI) |
-| `vision_max_retries` | `3` | retry a throttled vision call this many times before giving up |
-| `vision_retry_backoff` | `5.0` | seconds, exponential — wait grows by `2^n` between retries |
+| `whisper_language` | `""` | `""` = auto-detect; `en` forces English (less hallucination on music) |
+| `whisper_translate` | `true` | translate non-English speech to English |
+| `vision_model` | `claude-sonnet-4-6` | the Claude path only; `tokens.model` records what actually ran |
+| `frame_every_sec` | `2` | sample one frame every N seconds |
+| `max_frames` | `6` | cap frames sent to vision |
+| `frame_max_width` | `720` | measured: 1440 loses to 720 on every metric |
+| `vision_concurrency` | `1` | local: 3 in flight at 32k ctx pushes a 9.4 GB model off a 16 GB card |
+| `vision_max_retries` | `3` | retries per reel |
+| `vision_retry_backoff` | `5.0` | seconds, exponential (5, 10, 20…) |
 
-> Force English (`whisper_language: en`) to stop multilingual hallucination on music/text reels.
-
-### `batch` — concurrency
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `workers` | `3` | parallel reels for extract + render (1 = sequential) |
-
-> Vision is gated separately by `extract.vision_concurrency` (a process-wide semaphore) so raising `batch.workers` never floods the throttle-prone Claude CLI. See [SCALING.md](SCALING.md) for how the two interact.
-
-### `output` — what to render
+### `batch`, `output`, `paths`
 
 | Key | Default | Meaning |
-|-----|---------|---------|
-| `pdf` | `true` | per-reel PDF |
-| `docs_site` | `true` | mkdocs-material site (page-per-reel + master index) |
-| `combined_pdf` | `false` | also emit one merged PDF with bookmarks |
+|---|---|---|
+| `batch.workers` | `3` | parallel reels through extract + render (1 = sequential). Ingest stays sequential on purpose |
+| `output.pdf` | `true` | per-reel PDF |
+| `output.docs_site` | `true` | mkdocs-material site |
+| `output.combined_pdf` | `false` | one merged PDF with bookmarks |
+| `paths.data_dir` | `data` | inputs root |
+| `paths.output_dir` | `output` | derived artifacts root |
 
-### `paths` — where data lives
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `data_dir` | `data` | inputs root — downloaded media + per-reel JSON records |
-| `output_dir` | `output` | derived artifacts root — markdown, PDFs, site, knowledge, index, logs |
-
-> The derived sub-dirs (`knowledge/`, `index/`, `logs/`) are resolved by `Config`'s `*_dir` properties under `output_dir` — the one place the layout lives.
+> Vision is gated separately from `batch.workers` by a process-wide semaphore, so
+> raising workers never floods the throttle-prone vision stage. See
+> [SCALING.md](SCALING.md).
 
 ## Gotchas
 
 | Symptom | Cause | Fix |
-|---------|-------|-----|
-| `search` returns nothing / 409 | Index not built | Run `reels-scrap index` first |
-| Vision empty / silent failure | 3+ parallel `claude -p` calls get throttled (empty stderr) | Lower concurrency; pipeline backs off automatically — see [SCALING.md](SCALING.md) |
-| Multilingual garbage in transcript | Whisper auto-detect on music | Set `whisper_language: en` |
-| Cookie import fails on Linux | Browser open / no keyring | Close the browser; ensure `secretstorage` |
-| Profile/hashtag crawl rate-limited | Large IG crawl | Lower `source.limit`; ingest stays sequential by design |
+|---|---|---|
+| `Exceeded 30 redirects` on every source | dead session (the file's own expiry date is not evidence) | re-export `cookies.txt` — [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md#when-it-expires) |
+| `gpu busy:` and exit 3 | a foreign model holds the card | `ollama ps`, wait, or `REELS_IGNORE_GPU=1` |
+| every reel times out at 240 s | contention pushed layers to CPU | `ollama ps` must say `100% GPU` |
+| reels with no summary never re-run | vision failed; they are not "new" | `extract-cmd --missing-vision` |
+| `no JSON object in model output`, repeatedly | token budget ran out mid-JSON | raise `vision_local.max_tokens` |
+| `search` returns nothing / 409 | index not built | `reels-scrap index` |
+| multilingual garbage in transcript | whisper auto-detect on music | `whisper_language: en` |
+| cookie import fails on Linux | browser open, or no keyring | close the browser; ensure `secretstorage` |
+| `UnicodeDecodeError` / cp1252 | Windows default encoding | prefix `PYTHONUTF8=1` |
+| profile/hashtag crawl rate-limited | large IG crawl | lower `source.limit`; ingest is sequential by design |
 
 ## See also
 
+- [SYNC.md](SYNC.md) — the dedup model and the environment tracks
 - [ARCHITECTURE.md](ARCHITECTURE.md) — module map + data flow
 - [SCALING.md](SCALING.md) — reaching ~100 reels/hour
 - [DEPLOY.md](DEPLOY.md) — Docker + cloud migration

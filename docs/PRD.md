@@ -96,3 +96,9 @@ Full detail in `ARCHITECTURE.md`.
 - **M1** — full-archive backfill + cost dashboard + account facet + scheduled sync.
 - **M2** — saved views + status flags + richer export.
 - **M3** — local-LLM vision (fully air-gapped) + dedup.
+
+## See also
+
+- [PLAN-2026-08.md](PLAN-2026-08.md) — the current requirements
+- [ARCHITECTURE.md](ARCHITECTURE.md) — how it was built
+- [../README.md](../README.md) — what it does today

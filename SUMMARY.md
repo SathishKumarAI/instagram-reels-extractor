@@ -1,5 +1,10 @@
 # Project Summary — insta_reels_scrap → Reels Research Platform
 
+> **Historical — 2026-06-18.** Kept for the reasoning, not as instructions. The
+> current picture is [`README.md`](README.md) and
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); where work stopped is
+> [`STATUS.md`](STATUS.md).
+
 **One-page source of truth.** What it is, how it's built, every command, every
 module, the data layout, what was done in the 2026-06-18 session, decisions,
 scaling, deploy, tests, and follow-ups.
@@ -225,3 +230,9 @@ scratch: `REPLICATE.md` (master) + `00-architecture` … `08-docker-scaling`.
 **Doc index:** `README.md` · `SUMMARY.md` (this) · `TICKETS.md` ·
 `docs/{ARCHITECTURE,USAGE,SCALING,DEPLOY}.md` · `docs/WORKLOG.md` ·
 `docs/superpowers/specs/2026-06-18-research-platform-design.md` · `prompts/`
+
+## See also
+
+- [README.md](README.md) — what it does today
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the shipped structure
+- [docs/README.md](docs/README.md) — the documentation index

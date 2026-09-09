@@ -28,3 +28,8 @@ discover a bug.
 - 30 reels, stratified — owner, 2026-08-05.
 - Metrics **plus** a written analysis, not metrics alone — owner, 2026-08-05.
 - Test every model in the shortlist, treat it as a research project — owner, 2026-08-05.
+
+## See also
+
+- [README.md](README.md) — method and rules
+- [BENCH-2026-08-06.md](BENCH-2026-08-06.md) — what phase 6 produced

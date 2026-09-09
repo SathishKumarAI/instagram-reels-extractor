@@ -52,3 +52,8 @@ Two readings, both true:
 - Untested: whether feeding OCR to the *Claude* arm behaves the same, and whether
   ordering the lines (by frame, instead of easyocr's order) removes the fact cost.
   That is the next thing to try if anyone wants OCR on by default.
+
+## See also
+
+- [CAPTION-ABLATION-2026-08-20.md](CAPTION-ABLATION-2026-08-20.md) — the sibling measurement
+- [../../src/reels_scrap/extract/README.md](../../src/reels_scrap/extract/README.md) — the stage and its cap

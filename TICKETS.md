@@ -1,5 +1,9 @@
 # Tickets — Reels Research Platform
 
+> **Historical.** These tickets tracked the original platform build and are all
+> resolved. The live list is [`docs/BACKLOG-120.md`](docs/BACKLOG-120.md); the
+> queue is the Plane board (label `repo:instagram-reels-extractor`).
+
 Tracking the build of the research platform (spec:
 `docs/superpowers/specs/2026-06-18-research-platform-design.md`).
 Status: ☐ todo · ◑ in progress · ☑ done
@@ -68,3 +72,8 @@ run 2 `new=0 deduped=29`. No duplicate reels; only the delta flows each run.
 - [ ] Deep extraction (transcript/OCR/vision) not run — use conda env + `config.yaml`.
 - [ ] Schedule `reels-scrap sync` (cron / systemd timer) for hands-off latest-reel pulls.
 - [ ] Register more saved collections (`front-end` already has a manifest).
+
+## See also
+
+- [docs/BACKLOG-120.md](docs/BACKLOG-120.md) — the live list
+- [STATUS.md](STATUS.md) — where work stopped
