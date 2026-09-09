@@ -176,7 +176,7 @@ with tab_run:
         # validate + build config (fail-fast surfaces in the UI)
         try:
             cfg = _build_config()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             st.error(f"Config error: {e}")
             st.stop()
 
@@ -198,7 +198,7 @@ with tab_run:
         try:
             with st.spinner("Running pipeline… (first Whisper/OCR run downloads models)"):
                 reels, report = run_pipeline(cfg, "<ui>", progress=_progress)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             st.error(f"Pipeline failed: {e}")
             st.exception(e)
             st.stop()
