@@ -87,7 +87,7 @@ def register(app: typer.Typer) -> None:
             cfg.extract.vision_backend = backend
             console.print(f"[cyan]vision backend[/] → {backend}"
                           + (f" ({cfg.extract.vision_local.model})" if backend == "local" else ""))
-        from ..ingest.collection import session_ok
+        from ..ingest.collection import auth_blockers
         from ..sources import local_gpu_blockers, poll_all
 
         # a busy GPU makes local vision time out on every reel (240s instead of ~8s)
@@ -100,16 +100,19 @@ def register(app: typer.Typer) -> None:
                           "or REELS_IGNORE_GPU=1 to run anyway[/]")
             raise typer.Exit(3)
 
-        # probe once up front: an expired cookie fails all 20 sources identically, and
-        # 20 identical errors hide the one-line real cause (re-export the cookie file)
+        # probe once up front and STOP: an expired cookie fails all 20 sources
+        # identically, so continuing spends 20 Instagram requests to learn what one
+        # already said. Warning and running anyway is what this used to do (2026-09-08).
         spec = browser_spec(cfg, browser)
-        ok, why = session_ok(spec)
-        if ok:
-            console.print(f"[green]auth[/] {why} ({spec})")
-        else:
+        stale = auth_blockers(spec)
+        for why in stale:
             console.print(f"[red]auth: {why}[/]")
-            console.print("[dim]every source will fail until this is fixed — "
-                          "re-export cookies.txt (see docs/PRIVACY.md)[/]")
+        if stale:
+            console.print("[dim]every source would fail the same way — re-export "
+                          "cookies.txt (see docs/INSTAGRAM-ACCESS.md), or "
+                          "REELS_IGNORE_AUTH=1 to run anyway[/]")
+            raise typer.Exit(4)
+        console.print(f"[green]auth[/] ok ({spec})")
 
         from ..modelreg import GpuContended
 

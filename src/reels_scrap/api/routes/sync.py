@@ -207,11 +207,18 @@ def build(cfg: Config, config_path: str) -> APIRouter:
 
         def _job():
             from ...compare import cfg_for_backend
+            from ...ingest.collection import auth_blockers
             from ...sources import poll_all
             c = cfg_for_backend(backend, config_path)
             if body.fast:
                 c.extract.transcript = c.extract.ocr = False
             c.extract.vision = True
+            # same guard as the CLI: a dead session fails every source identically,
+            # and the Sync tab should say that once rather than 20 times
+            stale = auth_blockers(body.browser or "chrome")
+            if stale:
+                _SYNC.update(running=False, error=f"auth: {stale[0]}")
+                return
             try:
                 results = poll_all(c, config_path, browser=body.browser or "chrome",
                                    only=body.only or None)

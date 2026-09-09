@@ -27,7 +27,11 @@ Read this table instead of the code.
 ## Traps
 
 - **`sync` runs two guards before spending an Instagram request** — GPU busy, and a
-  cookie probe. Both exist because the failure they catch is expensive and looks
+  session probe. Both exist because the failure they catch is expensive and looks
   like something else (240s timeouts per reel; 20 identical source errors).
-- Exit codes are load-bearing: **3** means the GPU was busy or contended, **2** an
-  invalid flag, **1** nothing to do. The scheduled sync distinguishes them.
+  **Both stop the run** (`Exit(3)` / `Exit(4)`); the probe used to only warn, which
+  produced exactly the 20 identical errors it exists to prevent. Overrides:
+  `REELS_IGNORE_GPU=1`, `REELS_IGNORE_AUTH=1`.
+- Exit codes are load-bearing: **4** means the Instagram session is unusable,
+  **3** the GPU was busy or contended, **2** an invalid flag, **1** nothing to do.
+  The scheduled sync distinguishes them.

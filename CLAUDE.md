@@ -86,6 +86,10 @@ than retrying. `REELS_IGNORE_GPU=1` overrides both. Check with `ollama ps` and
 - Non-trivial logic ships with one runnable check in `tests/`.
 - Sync is idempotent and incremental. Anything that fails goes to the dead-letter
   with a reason; `--retry-failed` re-attempts.
+- `sync` stops before spending an Instagram request when the session probe fails
+  (`auth_blockers()`, exit **4**) or the GPU is busy (exit **3**). A guard that only
+  warns is not a guard — the probe used to warn and continue, which is how one dead
+  cookie cost 20 requests. Overrides: `REELS_IGNORE_AUTH=1`, `REELS_IGNORE_GPU=1`.
 - Instagram rate-limits hard (`HTTP 429`). Never parallelise IG calls, always sleep
   between pages, and stop the run on the first 429 rather than hammering.
 

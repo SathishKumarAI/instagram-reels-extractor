@@ -11,11 +11,14 @@ Update this when you STOP working, not when you start.
   `docs/INSTAGRAM-ACCESS.md`) and re-run; sync is incremental, nothing was lost.
   The GPU was free (1.7/16GB, 15%, no foreign model) and `reels-vision` was resident —
   this was purely auth.
-- **Filed, not fixed: the cookie probe warns and then runs anyway** (COD-177).
-  `cli/sources.py` calls `session_ok()`, prints "every source will fail until this is
-  fixed", and then calls `poll_all()` regardless — producing exactly the 20 identical
-  errors its own comment says it exists to prevent, and spending 20 Instagram requests
-  while logged out. The GPU guard beside it raises `Exit(3)`; this one should too.
+- **Fixed 2026-09-08 (COD-177): the session probe now stops the run.**
+  `auth_blockers()` in `ingest/collection.py` mirrors `local_gpu_blockers` — one
+  probe, a list of reasons, `REELS_IGNORE_AUTH=1` to override. `sync` exits **4**
+  before any source runs; the API's `_job` sets `_SYNC.error` and returns, so the
+  Sync tab says it once instead of 20 times. **Verified live against the currently
+  dead cookie: one `auth:` line, exit 4, zero source requests** (it was 20 identical
+  errors and 20 requests this morning). Rate-limited counts as a blocker too — more
+  requests are the last thing a 429 needs.
 - **Docs pass done 2026-09-08** (COD-176, branch `docs/readme-and-docs-index`):
   README rewritten around `sync` (the old one documented `reels-scrap run` on a Linux
   venv and never mentioned sync, `sources.json`, the local-GPU path, the GPU guard or

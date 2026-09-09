@@ -136,19 +136,24 @@ Instagram simply deciding. **The expiry timestamp inside `cookies.txt` is not th
 answer**: a file claiming a 2027 expiry can already be dead, because the invalidation
 happens server-side.
 
-The symptom is unmistakable — **every** source fails identically:
+The symptom is one probe, then a stop — `sync` exits **4** without touching a single
+source:
 
 ```
 auth: network error: Exceeded 30 redirects.
-✗ saved-all: Exceeded 30 redirects.
-✗ topic-research: Exceeded 30 redirects.
-…20 identical lines…
-0 new reel(s) ingested across 20 source(s).
+every source would fail the same way — re-export cookies.txt (see
+docs/INSTAGRAM-ACCESS.md), or REELS_IGNORE_AUTH=1 to run anyway
 ```
 
 Logged out, Instagram bounces the request around its login redirect until yt-dlp gives
 up counting. Other faces of the same cause: `no Instagram 'sessionid' cookie`,
-`status: fail` from `i.instagram.com`, or a collection page that returns logged-out HTML.
+`session expired (HTTP 401)`, `status: fail` from `i.instagram.com`, or a collection
+page that returns logged-out HTML. A `rate-limited (HTTP 429)` probe stops the run too —
+more requests are the last thing a 429 needs.
+
+> Before 2026-09-08 the probe printed its warning and then ran every source anyway,
+> producing 20 identical `Exceeded 30 redirects.` lines and spending 20 Instagram
+> requests while logged out. If you see that shape, you are on an older build.
 
 **Fix:** re-export `cookies.txt` (step 1 above) and re-run. Sync is incremental, so
 nothing is lost and nothing is re-downloaded.

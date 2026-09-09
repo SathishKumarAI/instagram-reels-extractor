@@ -129,8 +129,10 @@ fetched again, no duplicate record is ever created, and anything that fails goes
 dead-letter with a reason instead of stopping the run.
 
 Two guards run *before* it spends a single Instagram request — a busy GPU and a dead
-cookie both cost far more when discovered halfway through. Exit codes are load-bearing:
+cookie both cost far more when discovered halfway through, and each **stops** the run
+rather than warning. Exit codes are load-bearing: **4** = the session is unusable,
 **3** = GPU busy or contended, **2** = invalid flag, **1** = nothing to do.
+`REELS_IGNORE_AUTH=1` and `REELS_IGNORE_GPU=1` override the respective guard.
 
 ### The repair pass you will eventually need
 
@@ -259,7 +261,7 @@ template — without paying for vision again. Full table with examples:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Exceeded 30 redirects` on **every** source | the session is dead — Instagram is bouncing you to login | re-export `cookies.txt` ([guide](docs/INSTAGRAM-ACCESS.md#when-it-expires)) |
+| `auth: …` and exit 4 before any source runs | the session is dead — Instagram is bouncing you to login | re-export `cookies.txt` ([guide](docs/INSTAGRAM-ACCESS.md#when-it-expires)) |
 | `gpu busy:` and exit 3 | another model holds the card | `ollama ps`; wait, or `REELS_IGNORE_GPU=1` |
 | every reel times out at 240 s | layers offloaded to CPU by contention | check `ollama ps` says `100% GPU` |
 | reels have no summary and `sync` ignores them | vision failed; they are not "new" any more | `extract-cmd --missing-vision` |
