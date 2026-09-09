@@ -30,6 +30,156 @@ Everything else is indexed in **[docs/README.md](docs/README.md)**.
 | **Two models, one reel** | Each backend's answer is stored as a named `variant`, never overwriting another | Compare Claude against a local 7B on *your* reels before choosing |
 | **Nothing implicit** | No model auto-downloads, no source auto-added, no re-extraction behind your back | Every expensive thing is a command you typed |
 
+## The approach, for someone who wants to dissect it
+
+### Abstract
+
+A saved reel is a dense multimodal artifact — speech, on-screen text, a caption, and
+the visual scene — with **no retrievable structure**. Saving one costs a tap; finding it
+again costs everything, so a saved collection decays into a write-only archive. This
+project treats that as an *information-extraction* problem rather than a storage
+problem: reduce each video to a typed, grounded record, then make the corpus queryable.
+
+Formally, each reel `V` is reduced to a record
+
+```
+R(V) = ⟨ g, s, T, F_g, {(claim_i, frame_i, t_i)} ⟩
+```
+
+where `g` is a genre drawn from a closed set, `s` a summary, `T` tags, `F_g` a
+**genre-conditioned** field schema (a product reel has `{name, price, link, claims}`; a
+tutorial has `{tools, commands, links, steps}`), and each extracted claim carries the
+frame index and timestamp it came from. The provenance term is the load-bearing part:
+it converts an unverifiable summary into a checkable one, because every claim points at
+the second of video that is supposed to support it.
+
+Extraction runs on interchangeable backends — a frontier model via the Claude Code CLI,
+or one of seven open-weights VLMs on a local GPU — and **each backend's answer is stored
+as a named variant on the same reel**, never overwriting another. That single decision
+turns "which model should read my reels?" from an opinion into a measurement on the
+user's own corpus.
+
+### The problem, stated precisely
+
+| Sub-problem | Why it is hard here |
+|---|---|
+| **Acquisition** | Saved collections are private and have no official API. Instagram rate-limits hard, retired the per-collection endpoint mid-project (2026-08-17), and a logged-in session is the whole account — so acquisition is a *security* problem as much as a scraping one |
+| **Signal fusion** | The content is split across four channels (caption, speech, on-screen text, visual scene) that disagree, overlap, and are individually incomplete |
+| **Grounding** | A summary that invents a plausible detail is worse than no summary, because it is unfalsifiable at the point of use |
+| **Heterogeneity** | A workout reel, a product ad and a tutorial have nothing in common structurally; one flat schema fits none of them |
+| **Retrieval** | Dense retrieval over ~750 short records is weak on exactly the tokens that matter — a URL, an `@handle`, a product name |
+| **Evaluation** | There is no ground truth. Nobody is going to hand-label 750 reels, so model quality has to be argued from agreement, coverage and inspection instead of accuracy |
+
+### Method
+
+```mermaid
+flowchart LR
+  subgraph ACQ["Acquisition · sequential, rate-limit aware"]
+    A1["sources.json<br/>saved feed + collections"] --> A2["set-diff dedup<br/>shortcode = primary key"]
+    A2 --> A3["yt-dlp / instaloader<br/>media + metadata"]
+  end
+
+  subgraph SIG["Signal channels · independent, degradable"]
+    C1["caption<br/>free, from metadata"]
+    C2["transcript<br/>faster-whisper large-v3"]
+    C3["on-screen text<br/>easyocr, capped at 15 lines"]
+    C4["frames<br/>6 @ 720px, cached on spec"]
+  end
+
+  subgraph EXT["Extraction · one schema, many readers"]
+    P["prompts.py<br/>genre-conditioned schema<br/>+ per-backend nudge"]
+    B1["Claude Code CLI"]
+    B2["local VLM<br/>Ollama, 7 models"]
+    N["normalise.py<br/>JSON salvage · fact hygiene"]
+  end
+
+  subgraph REC["Record · the unit of truth"]
+    R["data/ID.json<br/>genre · summary · tags<br/>typed fields · facts + frame + timestamp<br/>one variant per backend"]
+  end
+
+  subgraph USE["Consumption · read-only, rebuildable"]
+    U1["semantic index<br/>fastembed, incremental"]
+    U2["RAG chat<br/>cited answers"]
+    U3["markdown · PDF · site"]
+    U4["Compare<br/>claim-level model diff"]
+  end
+
+  A3 --> C1 & C2 & C3 & C4
+  C1 & C2 & C3 & C4 --> P
+  P --> B1 & B2
+  B1 & B2 --> N --> R
+  R --> U1 & U2 & U3 & U4
+```
+
+Four commitments hold the design together:
+
+1. **The record is the unit of truth, not the artifact.** `data/<id>.json` is written
+   once and enriched in place; markdown, PDFs, the site, the index and the knowledge
+   base are all *derived* and disposable. Wiping `output/` costs a rebuild, never a
+   re-download — which is what makes experimentation affordable.
+2. **Every stage is idempotent and resumable.** Sync is a set-diff against the pool, so
+   re-running is free; a failure lands in a dead-letter with a reason rather than
+   halting the run.
+3. **Measurement before belief.** Nothing about extraction quality is asserted from
+   reading code. The A/B harness re-runs reels on *identical cached frames* so the model
+   or the prompt is the only variable, and reports metrics **split by marker kind** —
+   because the aggregate lied once already (see below).
+4. **Guards stop, they do not warn.** A run that cannot succeed is ended before it
+   spends a request or an hour of GPU: `gpu_blockers()` (exit 3), `auth_blockers()`
+   (exit 4). Both exist because the failure they catch was paid for in full, once.
+
+### The stack, and what each piece is doing there
+
+| Layer | Tool | Why this one |
+|---|---|---|
+| Acquisition | [yt-dlp](https://github.com/yt-dlp/yt-dlp), [instaloader](https://instaloader.github.io/) | yt-dlp carries the cookie handling and format selection; instaloader covers the session path. Neither is parallelised — Instagram punishes that |
+| Speech | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (large-v3) | CTranslate2, **not** torch — the transcript stage stays installable on a machine with no CUDA. ~6.5× realtime batched; 454 transcribed / 123 genuinely silent across the corpus |
+| On-screen text | [easyocr](https://github.com/JaidedAI/EasyOCR) | Optional (pulls torch). Feeding it back into the prompt is capped at 15 lines — 40 lines *cost* 1.5 facts/reel, measured |
+| Vision, cloud | [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) | Uses the existing subscription, so no API key sits on disk. Prompt goes on **stdin**, never argv — a large analysis silently degraded to "unavailable" (WinError 206) until that was fixed |
+| Vision, local | [Ollama](https://ollama.com) + [Qwen2.5-VL 7B q8](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) and 6 others | Rebuilt at **32k context** because the stock 4096 rejects six frames outright. $0 per reel, no egress |
+| Retrieval | [fastembed](https://github.com/qdrant/fastembed) (ONNX) | Local, no GPU needed. The index is keyed on a **content hash**, not mtime, so writing a variant does not trigger a full re-embed — 4m14s once, then 1.0s |
+| API | [FastAPI](https://fastapi.tiangolo.com/) + Pydantic | The schemas *are* the wire contract, shared by the typed client in `web/`. Binds `127.0.0.1`, no auth, by design |
+| UI | Vite + React + shadcn-style, Catppuccin Mocha | Client-side filtering over one corpus load; 13 tabs, no server round-trip per filter |
+| Rendering | [weasyprint](https://weasyprint.org/), [mkdocs-material](https://squidfunk.github.io/mkdocs-material/) | Both best-effort: a missing binary degrades one output, never the run |
+| CLI | [Typer](https://typer.tiangolo.com/) | Command name derives from the function name, so a command can move file without changing its interface |
+
+### Design decisions, and what each one costs
+
+| Decision | Bought | Paid |
+|---|---|---|
+| Flat JSON records on disk, no database | Zero setup, greppable, trivially diffable, rebuild anything | No transactions, no query planner; whole-corpus operations are O(n) file reads |
+| Reel shortcode as the primary key | Dedup is a set-diff; the same reel in two collections is downloaded once | Collections become *membership manifests*, so a collection is only as visible as the saved-feed scan (`COLLECTION_SCAN = 1000`) |
+| Model output stored as **variants** | Two readers coexist on one reel; the Compare tab diffs them at claim level for $0 | Records grow; a stale variant can be mistaken for a current one without reading `tokens.model` |
+| Genre-conditioned schema | Fields that actually fit the content, and are filterable | The genre classifier becomes load-bearing — a misclassification costs the whole field set |
+| Sequential ingest, concurrent extraction | Survives Instagram's rate limits while still using the machine | Wall-clock is bounded by acquisition on a first run |
+| Local vision as a first-class backend | $0/reel, zero egress, no key on disk | A 7B misses ~1.0–2.2 facts/reel against the Claude arm and will occasionally invent a name |
+| Guards that exit non-zero | A dead session costs 1 request instead of 20; a busy GPU costs 1 second instead of 40 minutes | A false positive blocks a run that would have worked — hence `REELS_IGNORE_AUTH` / `REELS_IGNORE_GPU` |
+
+### Threats to validity — the parts a reviewer should attack first
+
+Stated here rather than buried, because they bound every number in this repo:
+
+- **The reference arm is itself a model.** Agreement is measured against the Claude
+  output, not against truth. A claim marked "local-only" may be correct and merely
+  absent from the reference.
+- **The aggregate lied once.** A prompt change appeared to lift marker recall
+  0.169 → 0.453; splitting by kind showed most of the movement was a model copying a
+  40-hashtag block, while *sponsorship* detection had gone **backwards** (2/17 → 1/17)
+  before v2 fixed it (15/17). The harness now reports `by_kind` for this reason.
+- **Sample sizes are small and stated.** 30 reels for the bench, 3–12 for ablations.
+  Nothing here is a population claim.
+- **Claim matching uses containment, not Jaccard** — Jaccard scored a correct match at
+  0.3 because one model writes prose where another writes shouted fragments. The metric
+  is a design choice with its own bias.
+- **The corpus predates its own prompts.** 719 of 755 records were extracted before the
+  current prompt, so their `structured.links` is empty for reasons unrelated to model
+  ability. Re-extracting is an open decision, not an oversight.
+- **Only the local arm was re-measured** under the v2 prompt. The Claude arm's numbers
+  are from before it.
+
+Full method, results and the written why-they-differ analysis:
+[`docs/research/`](docs/research/README.md).
+
 ## Quickstart
 
 ### Windows (this machine)

@@ -7,6 +7,7 @@
 
 | I want to… | Read, in this order |
 |---|---|
+| **Understand what this is and why it is built this way** | [../README.md](../README.md#the-approach-for-someone-who-wants-to-dissect-it) — abstract, the problem stated precisely, the method diagram, the stack, the trade-offs, and the threats to validity |
 | **Get it running** | [SETUP.md](SETUP.md) → [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md) → [SYNC.md](SYNC.md) |
 | **Use it day to day** | [USAGE.md](USAGE.md) → [../README.md](../README.md#when-something-goes-wrong) |
 | **Run vision for free on my own GPU** | [LOCAL-VISION.md](LOCAL-VISION.md) → [research/MODELS.md](research/MODELS.md) |
