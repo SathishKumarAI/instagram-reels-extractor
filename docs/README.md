@@ -7,6 +7,7 @@
 
 | I want to… | Read, in this order |
 |---|---|
+| **Understand what this is and why it is built this way** | [../README.md](../README.md#the-approach-for-someone-who-wants-to-dissect-it) — abstract, the problem stated precisely, the method diagram, the stack, the trade-offs, and the threats to validity |
 | **Get it running** | [SETUP.md](SETUP.md) → [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md) → [SYNC.md](SYNC.md) |
 | **Use it day to day** | [USAGE.md](USAGE.md) → [../README.md](../README.md#when-something-goes-wrong) |
 | **Run vision for free on my own GPU** | [LOCAL-VISION.md](LOCAL-VISION.md) → [research/MODELS.md](research/MODELS.md) |
@@ -39,6 +40,16 @@
 | [BACKLOG-120.md](BACKLOG-120.md) | The live feature list — 174 items across 12 epics, with priority/effort/value |
 | [WORKFLOW-RESEARCH.md](WORKFLOW-RESEARCH.md) | The 2026-08-04 diagnosis: why outputs read vague, and the transcript/OCR coverage gaps |
 | [WORKLOG.md](WORKLOG.md) | Dated session log — what changed, and what it measured |
+
+### Audits — evidence, not a queue
+
+Read-only passes over the codebase. They propose; they do not decide, and nothing in them
+was applied. Findings worth acting on were filed as work items and are named in each report.
+
+| Report | Holds |
+|---|---|
+| [reports/OPTIMIZATION-AUDIT-2026-09-08.md](reports/OPTIMIZATION-AUDIT-2026-09-08.md) | 17 findings on wasted work, throughput, token spend and cheap guards, each labelled **MEASURED** / **ESTIMATE** / **UNMEASURED**, plus a "found healthy" section for the negatives |
+| [reports/DEAD-CODE-2026-09-08.md](reports/DEAD-CODE-2026-09-08.md) | Dead symbols, **write-only fields** (the `ocr_text` shape), vestigial config, and an explicit "deliberately kept — do not delete" list. AST-parsed, then re-checked by `git grep` |
 
 ### Code-level maps
 
