@@ -1,5 +1,33 @@
 # Worklog
 
+## 2026-09-08 (later) — The session guard now stops the run (COD-177)
+
+The probe added in the P0 slice printed "every source will fail until this is fixed"
+and then called `poll_all()` anyway. This morning that cost 20 Instagram requests and
+20 identical `Exceeded 30 redirects.` lines to learn what the first line already said.
+
+`auth_blockers(browser)` in `ingest/collection.py`, shaped exactly like the existing
+`local_gpu_blockers(cfg)`: one probe, a list of human reasons, empty list means go, and
+`REELS_IGNORE_AUTH=1` overrides for when the probe is wrong. Both call sites use it —
+`cli/sources.py` raises `Exit(4)`, and the API's `_job` sets `_SYNC.error` and returns
+before starting, so the Sync tab reports the cause once rather than per source. A 429
+blocks too: more requests are the last thing a rate limit needs.
+
+**Verified live** against the currently dead cookie:
+
+```
+auth: network error: Exceeded 30 redirects.
+every source would fail the same way — re-export cookies.txt (see
+docs/INSTAGRAM-ACCESS.md), or REELS_IGNORE_AUTH=1 to run anyway
+exit=4
+```
+
+Zero source requests, against 20 this morning. **146 tests pass** (6 new, covering the
+helper, the 429 case, the override, and that the CLI exits 4 with `poll_all` never
+called), ruff clean on `src`/`tests`, `scrub-personal.py --check` clean, 0 broken links
+across 61 markdown files. Exit-code tables updated in `README.md`, `docs/USAGE.md`,
+`cli/README.md` and `CLAUDE.md` in the same commit.
+
 ## 2026-09-08 — Dead session found by a real sync · README rewritten around `sync` · docs index, access guide, formatting pass
 
 **Ran a sync, and it failed the way the docs did not describe.** Local-GPU sync on

@@ -15,6 +15,7 @@ item's `saved_collection_ids`; its own endpoint was retired by Instagram (see
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -183,6 +184,23 @@ def session_ok(browser: str = "chrome") -> tuple[bool, str]:
     if r.status_code == 429:
         return False, "rate-limited (HTTP 429) — session may still be fine, retry later"
     return False, f"unexpected HTTP {r.status_code}"
+
+
+def auth_blockers(browser: str = "chrome") -> list[str]:
+    """Why a sync must not start yet. Empty list = go. Mirrors `local_gpu_blockers`.
+
+    A dead session does not fail *some* sources — it fails all of them, identically,
+    one wasted Instagram request each (measured 2026-09-08: 20 of 20 sources returned
+    "Exceeded 30 redirects.", 0 reels ingested, while logged out). Rate-limited counts
+    as a blocker too: more requests are the last thing a 429 needs.
+
+    `REELS_IGNORE_AUTH=1` overrides, for the case the probe is wrong and the sources
+    would have worked — the same escape hatch `REELS_IGNORE_GPU` gives the GPU guard.
+    """
+    if os.environ.get("REELS_IGNORE_AUTH"):
+        return []
+    ok, why = session_ok(browser)
+    return [] if ok else [why]
 
 
 def _fetch_items(

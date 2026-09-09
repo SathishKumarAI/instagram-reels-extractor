@@ -115,6 +115,7 @@ Load-bearing — the scheduled sync distinguishes them.
 | `1` | nothing to do (no enabled sources, no reels ingested) |
 | `2` | invalid flag or missing config for the chosen backend |
 | `3` | GPU busy before the run, or contended during it |
+| `4` | the Instagram session is unusable — expired, rate-limited, or no `sessionid`. Override with `REELS_IGNORE_AUTH=1` |
 
 ## Where inputs and outputs land
 
@@ -212,7 +213,7 @@ Full comparison and the security rules: [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.m
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Exceeded 30 redirects` on every source | dead session (the file's own expiry date is not evidence) | re-export `cookies.txt` — [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md#when-it-expires) |
+| `auth: …` and exit 4, before any source runs | dead session (the file's own expiry date is not evidence) | re-export `cookies.txt` — [INSTAGRAM-ACCESS.md](INSTAGRAM-ACCESS.md#when-it-expires) |
 | `gpu busy:` and exit 3 | a foreign model holds the card | `ollama ps`, wait, or `REELS_IGNORE_GPU=1` |
 | every reel times out at 240 s | contention pushed layers to CPU | `ollama ps` must say `100% GPU` |
 | reels with no summary never re-run | vision failed; they are not "new" | `extract-cmd --missing-vision` |
