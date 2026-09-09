@@ -41,6 +41,16 @@
 | [WORKFLOW-RESEARCH.md](WORKFLOW-RESEARCH.md) | The 2026-08-04 diagnosis: why outputs read vague, and the transcript/OCR coverage gaps |
 | [WORKLOG.md](WORKLOG.md) | Dated session log — what changed, and what it measured |
 
+### Audits — evidence, not a queue
+
+Read-only passes over the codebase. They propose; they do not decide, and nothing in them
+was applied. Findings worth acting on were filed as work items and are named in each report.
+
+| Report | Holds |
+|---|---|
+| [reports/OPTIMIZATION-AUDIT-2026-09-08.md](reports/OPTIMIZATION-AUDIT-2026-09-08.md) | 17 findings on wasted work, throughput, token spend and cheap guards, each labelled **MEASURED** / **ESTIMATE** / **UNMEASURED**, plus a "found healthy" section for the negatives |
+| [reports/DEAD-CODE-2026-09-08.md](reports/DEAD-CODE-2026-09-08.md) | Dead symbols, **write-only fields** (the `ocr_text` shape), vestigial config, and an explicit "deliberately kept — do not delete" list. AST-parsed, then re-checked by `git grep` |
+
 ### Code-level maps
 
 Each of these is a `change → file` table. Read the table instead of the code.
