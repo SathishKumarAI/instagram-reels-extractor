@@ -3,6 +3,16 @@
 Update this when you STOP working, not when you start.
 
 - **Last touched:** 2026-09-08 (on the **Windows** box, not the Rocky Linux one)
+- **Both of today's branches are merged to `main` and deleted** — PR **#16** (docs,
+  COD-176) and PR **#17** (the session guard, COD-177), squashed as `fa9833e` and
+  `583f2ad`. On `main`: **146 tests pass**, `ruff check src tests` clean,
+  `scrub-personal.py --check` clean, 0 broken relative links across 61 tracked
+  markdown files.
+- **The next action is yours, and nothing else is blocked on code:** re-export
+  `cookies.txt`, then
+  `PYTHONUTF8=1 .venv-win/Scripts/python.exe -m reels_scrap.cli sync -c config-local.yaml`.
+  Expect `auth ok (cookies.txt)` as the first line; if it prints `auth: …` and exits
+  **4**, the new export did not take.
 - **The Instagram session is dead — sync cannot run until it is re-exported.**
   A local-vision sync on 2026-09-08 failed **20 of 20 sources** with
   `Exceeded 30 redirects.` and ingested nothing. `cookies.txt` was 19.6 days old and
@@ -19,7 +29,7 @@ Update this when you STOP working, not when you start.
   dead cookie: one `auth:` line, exit 4, zero source requests** (it was 20 identical
   errors and 20 requests this morning). Rate-limited counts as a blocker too — more
   requests are the last thing a 429 needs.
-- **Docs pass done 2026-09-08** (COD-176, branch `docs/readme-and-docs-index`):
+- **Docs pass done 2026-09-08** (COD-176, PR #16):
   README rewritten around `sync` (the old one documented `reels-scrap run` on a Linux
   venv and never mentioned sync, `sources.json`, the local-GPU path, the GPU guard or
   the `--missing-vision` repair pass); new `docs/INSTAGRAM-ACCESS.md` (four ways to
